@@ -1,8 +1,8 @@
-# 13章 MySQLの導入 ― 稼働中の本番をアップデートする
+# 14章 MySQLの導入 ― 稼働中の本番をアップデートする
 
-> 🔰 この章は **運用編** です。[12章](12_本番運用.md) で公開した本番（Nginx + Gunicorn + systemd、DBは **SQLite**）が**すでに動いていて、クルーが実際にシフトを提出している**前提で、そこへ MySQL を後から導入します。新規構築ではなく「**稼働中のシステムにアップデートを適用する**」作業として進めます。
+> 🔰 この章は **運用編** です。[13章](13_本番運用.md) で公開した本番（Nginx + Gunicorn + systemd、DBは **SQLite**）が**すでに動いていて、クルーが実際にシフトを提出している**前提で、そこへ MySQL を後から導入します。新規構築ではなく「**稼働中のシステムにアップデートを適用する**」作業として進めます。
 >
-> 前提環境（Ubuntu/WSL2・`systemd`・`apt`）と、`/home/nagin/ShiftManager`・ユーザー `nagin`・サービス名 `shiftmanager` の読み替えは [12章の「前提環境／置換早見表」](12_本番運用.md) と同じです。自分の環境に合わせて置き換えてください。
+> 前提環境（Ubuntu/WSL2・`systemd`・`apt`）と、`/home/nagin/ShiftManager`・ユーザー `nagin`・サービス名 `shiftmanager` の読み替えは [13章の「前提環境／置換早見表」](13_本番運用.md) と同じです。自分の環境に合わせて置き換えてください。
 
 実運用でDBを入れ替えるときの肝は次の3つです。本章はこれを軸に組み立てます。
 
@@ -12,7 +12,7 @@
 
 ---
 
-## 13-0. なぜ・いつ MySQL にするか
+## 14-0. なぜ・いつ MySQL にするか
 
 SQLite は優秀で、数人〜数十人規模なら本番でも十分です。MySQL を検討する主な理由は **同時書き込み** です。
 
@@ -23,7 +23,7 @@ SQLite は優秀で、数人〜数十人規模なら本番でも十分です。M
 
 ---
 
-## 13-1. 作戦 ― 無停止の準備 → 短いメンテで切替 → 戻せる
+## 14-1. 作戦 ― 無停止の準備 → 短いメンテで切替 → 戻せる
 
 ```
 【無停止でできる準備】   MySQL導入・ドライバ・settings・DB作成
@@ -39,7 +39,7 @@ SQLite は優秀で、数人〜数十人規模なら本番でも十分です。M
 
 ---
 
-## 13-2. 【無停止】MySQL とドライバを用意する
+## 14-2. 【無停止】MySQL とドライバを用意する
 
 MySQL サーバー本体と、Python ドライバ `mysqlclient` のビルドに必要な OS 側ライブラリを入れます。
 
@@ -67,7 +67,7 @@ mysqlclient>=2.2
 
 ---
 
-## 13-3. 【無停止】settings を「DB切替」対応にする
+## 14-3. 【無停止】settings を「DB切替」対応にする
 
 `settings.py` を、環境変数 `DJANGO_DB=mysql` のときだけ MySQL を使う形にします。**既定は今まで通り SQLite** なので、この変更を入れても本番は壊れません。
 
@@ -99,13 +99,13 @@ else:
 
 **解説**
 
-- **`HOST` は `localhost`**: MySQL では `'ユーザー'@'localhost'`（Unixソケット接続）と `'...'@'127.0.0.1'`（TCP接続）を**別物**として扱います。同一マシンならソケット接続（`localhost`）が設定いらずで確実です。次の 13-4 で作るユーザーも `@'localhost'` に揃えます。
+- **`HOST` は `localhost`**: MySQL では `'ユーザー'@'localhost'`（Unixソケット接続）と `'...'@'127.0.0.1'`（TCP接続）を**別物**として扱います。同一マシンならソケット接続（`localhost`）が設定いらずで確実です。次の 14-4 で作るユーザーも `@'localhost'` に揃えます。
 - **`utf8mb4`**: 絵文字も含む完全な UTF-8。日本語運用でも文字化けしません。
 - **秘密情報（`DB_PASSWORD`）は環境変数**で渡し、コード/Gitには載せません。
 
 ---
 
-## 13-4. 【無停止】MySQL に DB と接続ユーザーを作る
+## 14-4. 【無停止】MySQL に DB と接続ユーザーを作る
 
 Ubuntu の MySQL 8 は管理者(root)が OS 認証なので `sudo mysql` で入れます。
 
@@ -119,11 +119,11 @@ $ sudo mysql -e "CREATE DATABASE IF NOT EXISTS shift_manager CHARACTER SET utf8m
 - 空のデータベース `shift_manager` を作成（中身は次のステップで入れる）。
 - アプリ専用ユーザー `shift`（`@localhost`）を作り、そのDBの全権限を与える。
 
-> 🔰 ここで決めたパスワードは、後の移行コマンドと systemd 設定（13-6）で使うので控えておきます。
+> 🔰 ここで決めたパスワードは、後の移行コマンドと systemd 設定（14-6）で使うので控えておきます。
 
 ---
 
-## 13-5. 【メンテ開始】データを移す
+## 14-5. 【メンテ開始】データを移す
 
 ここからが実際の入れ替えです。利用が少ない時間に、できれば「提出を一時停止する」案内を出してから短時間で行います。
 
@@ -152,7 +152,7 @@ $ ./venv/bin/python manage.py dumpdata \
 ### ③ MySQL に空のテーブルを作る（migrate）
 
 ```
-$ DJANGO_DB=mysql DB_PASSWORD='<13-4のパスワード>' \
+$ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
     ./venv/bin/python manage.py migrate
 ```
 
@@ -161,7 +161,7 @@ $ DJANGO_DB=mysql DB_PASSWORD='<13-4のパスワード>' \
 ### ④ データを流し込む（loaddata）
 
 ```
-$ DJANGO_DB=mysql DB_PASSWORD='<13-4のパスワード>' \
+$ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
     ./venv/bin/python manage.py loaddata datadump.json
 Installed N object(s) from 1 fixture(s)
 ```
@@ -170,20 +170,20 @@ Installed N object(s) from 1 fixture(s)
 
 ---
 
-## 13-6. 【切替】接続先を MySQL にする（systemd drop-in）
+## 14-6. 【切替】接続先を MySQL にする（systemd drop-in）
 
 最後に、稼働中の `shiftmanager` サービスの接続先を MySQL へ向けます。ここでは**元のユニットファイルを直接編集せず**、`drop-in`（追加設定ファイル）で上書きします。
 
 drop-in を使う利点:
 
-- 12章で**自動生成した `SECRET_KEY` をそのまま保てる**（ユニットを作り直さない）。
+- 13章で**自動生成した `SECRET_KEY` をそのまま保てる**（ユニットを作り直さない）。
 - 設定が分離されて見通しが良い。
 - **このファイルを消すだけで元（SQLite）に戻せる**＝ロールバックが簡単。
 
 ```
 $ sudo mkdir -p /etc/systemd/system/shiftmanager.service.d
 $ printf '%s\n' '[Service]' 'Environment=DJANGO_DB=mysql' \
-    'Environment=DB_PASSWORD=<13-4のパスワード>' \
+    'Environment=DB_PASSWORD=<14-4のパスワード>' \
     | sudo tee /etc/systemd/system/shiftmanager.service.d/mysql.conf >/dev/null
 $ sudo chmod 640 /etc/systemd/system/shiftmanager.service.d/mysql.conf   # 鍵/パスワード保護
 $ sudo systemctl daemon-reload
@@ -194,7 +194,7 @@ $ sudo systemctl restart shiftmanager
 
 ---
 
-## 13-7. 動作確認 ― 本当に MySQL で動いているか
+## 14-7. 動作確認 ― 本当に MySQL で動いているか
 
 ```
 # サービスが動いているか
@@ -218,7 +218,7 @@ $ sudo mysql -e "SELECT COUNT(*) FROM shift_manager.accounts_user;"
 
 ---
 
-## 13-8. ロールバック ― うまくいかないとき
+## 14-8. ロールバック ― うまくいかないとき
 
 切替後に不具合が出たら、**drop-in を消して再起動するだけ**で SQLite に戻せます。`db.sqlite3` は触っていないので、移行直前の状態に即復帰します。
 
@@ -232,7 +232,7 @@ $ sudo systemctl restart shiftmanager
 
 ---
 
-## 13-9. 後片付けと、これからの運用
+## 14-9. 後片付けと、これからの運用
 
 - **移行ダンプを削除**: `rm datadump.json`（個人データを含むため）。バックアップ `db.sqlite3.bak` も不要になったら安全に削除。
 - **バックアップ方法が変わる**: これからは SQLite ファイルのコピーではなく `mysqldump` を使います。
@@ -246,12 +246,12 @@ $ sudo systemctl restart shiftmanager
 
 ## つまずきポイント
 
-- **`mysqlclient` が pip で入らない** → OSの開発ライブラリ不足（13-2の `default-libmysqlclient-dev build-essential pkg-config`）。
+- **`mysqlclient` が pip で入らない** → OSの開発ライブラリ不足（14-2の `default-libmysqlclient-dev build-essential pkg-config`）。
 - **`Access denied for user 'shift'@'...'`** → ユーザーの**ホスト指定**ズレ。`HOST=localhost`（ソケット）なら `'shift'@'localhost'`、`127.0.0.1`（TCP）なら `'shift'@'127.0.0.1'` か `@'%'` が必要。本章は `localhost` に統一。
-- **`loaddata` で IntegrityError（duplicate entry）** → `dumpdata` で `contenttypes` と `auth.permission` を除外し忘れている（13-5②）。
+- **`loaddata` で IntegrityError（duplicate entry）** → `dumpdata` で `contenttypes` と `auth.permission` を除外し忘れている（14-5②）。
 - **`Authentication plugin 'caching_sha2_password' ...` で接続できない** → MySQL 8 の既定認証に古いドライバが対応していない。`./venv/bin/pip install -U mysqlclient` でドライバを最新化する（本章のmysqlclient 2.2系なら通常は問題なし）。
 - **日本語が文字化け** → DBの文字コードが `utf8mb4` か、`OPTIONS={'charset':'utf8mb4'}` を確認。
-- **切替後に全ページ 500** → `DB_PASSWORD` の誤り、または MySQL 未起動（`systemctl status mysql`）。まずロールバック（13-8）して落ち着いて確認。
+- **切替後に全ページ 500** → `DB_PASSWORD` の誤り、または MySQL 未起動（`systemctl status mysql`）。まずロールバック（14-8）して落ち着いて確認。
 
 ---
 
@@ -266,4 +266,4 @@ $ sudo systemctl restart shiftmanager
 
 次章では、このWSL上の本番を **同じLANの他端末から開ける**ようにします。
 
-➡️ [14章 LANに公開する](14_LANへの公開.md)
+➡️ [15章 LANに公開する](15_LANへの公開.md)

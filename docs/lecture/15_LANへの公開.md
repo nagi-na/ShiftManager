@@ -1,12 +1,12 @@
-# 14章 LANに公開する（WSL + ミラーモード）
+# 15章 LANに公開する（WSL + ミラーモード）
 
-> 🔰 この章も **運用編** です。[12章](12_本番運用.md)・[13章](13_MySQLの導入.md) で、WSL上に Nginx + Gunicorn + systemd + MySQL の本番構成が動いている前提で、それを **同じLAN（Wi-Fi）上の他の端末（スマホ・別PC）から開けるように**します。
+> 🔰 この章も **運用編** です。[13章](13_本番運用.md)・[14章](14_MySQLの導入.md) で、WSL上に Nginx + Gunicorn + systemd + MySQL の本番構成が動いている前提で、それを **同じLAN（Wi-Fi）上の他の端末（スマホ・別PC）から開けるように**します。
 >
-> 前提環境（Ubuntu/WSL2・`systemd`）と、`/home/nagin/ShiftManager`・ユーザー `nagin` 等の読み替えは [12章の「前提環境／置換早見表」](12_本番運用.md) と同じです。LAN IP（本章の例では `192.168.10.8`）は**あなたの環境の値**に置き換えてください。
+> 前提環境（Ubuntu/WSL2・`systemd`）と、`/home/nagin/ShiftManager`・ユーザー `nagin` 等の読み替えは [13章の「前提環境／置換早見表」](13_本番運用.md) と同じです。LAN IP（本章の例では `192.168.10.8`）は**あなたの環境の値**に置き換えてください。
 
 ---
 
-## 14-1. なぜ、そのままでは他の端末から見えないのか
+## 15-1. なぜ、そのままでは他の端末から見えないのか
 
 WSL2 は既定で **NAT** という方式で動きます。WSL には LAN とは別の**内部IP（`172.x.x.x`）**が割り当てられ、LAN上の他端末からは直接たどり着けません。
 
@@ -29,7 +29,7 @@ $ ip -4 -o addr show | grep eth
 
 ---
 
-## 14-2. 2つの解決策
+## 15-2. 2つの解決策
 
 | 方法 | 概要 | 長所 | 短所 |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ $ ip -4 -o addr show | grep eth
 
 ---
 
-## 14-3. 【準備1】Windows の LAN IP を調べ、許可リストに追加する
+## 15-3. 【準備1】Windows の LAN IP を調べ、許可リストに追加する
 
 まず公開に使う **WindowsホストのLAN IP** を調べます。WSL から Windows のコマンドを呼べます。
 
@@ -52,7 +52,7 @@ $ ipconfig.exe | grep -A4 -iE "Wi-Fi|Ethernet" | grep IPv4
 
 > ⚠️ `172.x`・`10.x`（WSL/Hyper-V用）は仮想アダプタなので無視。**`192.168.x.x` のような家庭/社内LANのアドレス**を選びます。
 
-`DEBUG=False` では `ALLOWED_HOSTS` に無いホストは拒否されます。このLAN IPを許可に追加します。12・13章と同じく **systemd の drop-in** で（元のユニットは触らず上書き）。
+`DEBUG=False` では `ALLOWED_HOSTS` に無いホストは拒否されます。このLAN IPを許可に追加します。12・14章と同じく **systemd の drop-in** で（元のユニットは触らず上書き）。
 
 ```
 $ printf '%s\n' '[Service]' 'Environment=DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.10.8' \
@@ -70,7 +70,7 @@ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.10.8
 
 ---
 
-## 14-4. 【準備2】ミラーモードを有効化する（.wslconfig）
+## 15-4. 【準備2】ミラーモードを有効化する（.wslconfig）
 
 Windows ユーザーのホームに `.wslconfig` を作り、ネットワークをミラーに切り替えます。WSL からは `/mnt/c/Users/<Windowsユーザー>/.wslconfig` として編集できます。
 
@@ -86,7 +86,7 @@ networkingMode=mirrored
 
 ---
 
-## 14-5. WSL を再起動して反映する
+## 15-5. WSL を再起動して反映する
 
 `.wslconfig` の変更は **WSLの再起動**で反映されます。
 
@@ -100,7 +100,7 @@ PS> wsl --shutdown
 
 ---
 
-## 14-6. 反映を確認する
+## 15-6. 反映を確認する
 
 ミラーモードが効くと、WSL に **ホストと同じ LAN IP** が付きます。
 
@@ -122,7 +122,7 @@ $ curl -s -o /dev/null -w "%{http_code}\n" http://192.168.10.8/login/
 
 ---
 
-## 14-7. Windows ファイアウォールで受信を許可する
+## 15-7. Windows ファイアウォールで受信を許可する
 
 ミラーモードでは **Windows のファイアウォール規則が WSL にも適用**されます。ポート80の受信を許可します。
 
@@ -137,7 +137,7 @@ PS> New-NetFirewallRule -DisplayName "WSL ShiftManager HTTP 80" `
 
 ---
 
-## 14-8. 他の端末からアクセスする
+## 15-8. 他の端末からアクセスする
 
 同じ Wi-Fi/LAN につないだ **スマホや別PC**のブラウザで開きます。
 
@@ -147,14 +147,14 @@ http://192.168.10.8/
 
 ログイン画面が出れば成功です。LAN内の誰でも（IDとパスワードを持つ人が）シフト提出にアクセスできます。
 
-> ⚠️ **これは「LAN内」への公開**です。インターネットからのアクセスや、パスワードを安全に送るための **HTTPS化** はまだです。インターネットへ正規HTTPSで公開する方法は次の [15章](15_Cloudflareトンネルで公開.md) で扱います。
+> ⚠️ **これは「LAN内」への公開**です。インターネットからのアクセスや、パスワードを安全に送るための **HTTPS化** はまだです。インターネットへ正規HTTPSで公開する方法は次の [16章](16_Cloudflareトンネルで公開.md) で扱います。
 
 ---
 
 ## つまずきポイント
 
 - **他端末から開けない** → ①ファイアウォール規則を入れたか ②ネットワークが「パブリック」に分類されていないか。Publicの場合は規則を `-Profile Private,Public` にするか、Windowsのネットワーク設定で接続を「プライベート」に変更（学内/社内ネットは管理ポリシーに従う）。
-- **`400 Bad Request` になる** → `ALLOWED_HOSTS` にアクセスに使ったIP/ホスト名が入っていない（14-3）。
+- **`400 Bad Request` になる** → `ALLOWED_HOSTS` にアクセスに使ったIP/ホスト名が入っていない（15-3）。
 - **再起動したらアクセスできない** → ルーターのDHCPでLAN IPが変わった可能性。`ipconfig.exe` で再確認し、変わっていれば `ALLOWED_HOSTS` を更新。**ルーターでIP固定（DHCP予約）**しておくと安定します。
 - **ミラーモードにならない（`hostname -I` が `172.x` のまま）** → Windowsが 11 22H2 未満。下の付録（ポート転送）を使う。
 - **`localhost` で開けなくなった** → ミラーモードでも `http://localhost/`・`http://127.0.0.1/` は引き続き使えます。
@@ -175,7 +175,7 @@ PS> netsh interface portproxy add v4tov4 listenport=80 listenaddress=0.0.0.0 con
 PS> New-NetFirewallRule -DisplayName "WSL ShiftManager HTTP 80" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 80 -Profile Private
 ```
 
-そして `ALLOWED_HOSTS` に **WindowsのLAN IP**（`192.168.x.x`）を追加（14-3と同じ）。
+そして `ALLOWED_HOSTS` に **WindowsのLAN IP**（`192.168.x.x`）を追加（15-3と同じ）。
 
 > ⚠️ NATの **WSL IP（`172.x`）は再起動のたびに変わります**。変わったら `netsh interface portproxy reset` してから再登録が必要です（起動時に自動設定するスクリプトを組む手もあります）。この煩雑さが無いのがミラーモードの利点です。
 
@@ -189,4 +189,4 @@ PS> New-NetFirewallRule -DisplayName "WSL ShiftManager HTTP 80" -Direction Inbou
 
 次章では、Cloudflare Tunnel を使って、この課題（ポート開放・CGNAT・HTTPS証明書）をまとめて解決し、**インターネットから正規HTTPSで公開**します。
 
-➡️ [15章 Cloudflareトンネルでインターネット公開する](15_Cloudflareトンネルで公開.md)
+➡️ [16章 Cloudflareトンネルでインターネット公開する](16_Cloudflareトンネルで公開.md)

@@ -83,7 +83,7 @@ db.sqlite3-journal
 staffpass.txt
 ```
 
-> 🔰 `SECRET_KEY` は、ファイルごと無視するのではなく **コードに直書きしない**のが対策です。`settings.py` で `os.environ.get("DJANGO_SECRET_KEY", ...)` のように環境変数から読む形にしておきます（詳しくは [12章](12_本番運用.md)）。
+> 🔰 `SECRET_KEY` は、ファイルごと無視するのではなく **コードに直書きしない**のが対策です。`settings.py` で `os.environ.get("DJANGO_SECRET_KEY", ...)` のように環境変数から読む形にしておきます（詳しくは [13章](13_本番運用.md)）。
 
 ---
 
