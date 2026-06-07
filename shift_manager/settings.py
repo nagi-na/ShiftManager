@@ -39,26 +39,6 @@ ALLOWED_HOSTS = (
     else []
 )
 
-# --- リバースプロキシ / サブパス配下での公開向け（環境変数で有効化。未設定なら無効） ---
-# 上位(Nginx/Apache)がHTTPSを終端する場合、Djangoに「これはhttps」と伝えるヘッダ
-if os.environ.get('DJANGO_BEHIND_TLS_PROXY') == '1':
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# サブパス（例: /~user/shift）配下で動かすときのURLプレフィックス
-_force_script_name = os.environ.get('DJANGO_FORCE_SCRIPT_NAME')
-if _force_script_name:
-    FORCE_SCRIPT_NAME = _force_script_name
-
-# HTTPS配信時に信頼するオリジン（POST/CSRF用）。カンマ区切りで指定
-_csrf_origins = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
-if _csrf_origins:
-    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
-
-# HTTPSでのみCookieを送る（HTTPS公開時に有効化）
-if os.environ.get('DJANGO_SECURE_COOKIES') == '1':
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
 
 # Application definition
 
@@ -172,14 +152,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = os.environ.get('DJANGO_STATIC_URL', 'static/')
+STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-# collectstatic の出力先。サブパス公開ではWeb公開ディレクトリを環境変数で指定
-STATIC_ROOT = os.environ.get('DJANGO_STATIC_ROOT') or (BASE_DIR / 'staticfiles')
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # 本番で collectstatic の出力先
 
 # Media files (アップロードされた確定シフトPDF など)
-MEDIA_URL = os.environ.get('DJANGO_MEDIA_URL', 'media/')
-MEDIA_ROOT = os.environ.get('DJANGO_MEDIA_ROOT') or (BASE_DIR / 'media')
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
