@@ -24,3 +24,6 @@ db.sqlite3-journal
 .claude/
 
 staffpass.txt
+
+# DB移行用の一時ダンプ（個人データ・パスワードハッシュを含む。移行後は削除）
+datadump.json

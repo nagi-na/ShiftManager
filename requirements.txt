@@ -4,8 +4,8 @@ Django>=5.1,<5.2
 # 本番用WSGIサーバー（runserverの代わりにアプリを動かす）
 gunicorn>=23,<27
 
-# 本番DB(MySQL)接続ドライバ。
+# MySQL接続ドライバ。
 # 利用前に OS 側の依存が必要:
 #   sudo apt install pkg-config default-libmysqlclient-dev build-essential
-# 開発(SQLite)のみなら未インストールでも動く。
-# mysqlclient>=2.2
+# 開発(SQLite)のみなら未インストールでも動く（DJANGO_DB=mysql のときだけ必要）。
+mysqlclient>=2.2
