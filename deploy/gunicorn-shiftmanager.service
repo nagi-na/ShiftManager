@@ -6,10 +6,16 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now shiftmanager
 #
-# 本番用の SECRET_KEY を生成する:
-#   ./venv/bin/python -c "from django.core.management.utils import get_random_secret_key as g; print(g())"
+# 本番用の SECRET_KEY を生成する（英数字のみ。複数ワーカーで共有される固定値）:
+#   KEY=$(python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits) for _ in range(64)))")
+#   sed "s#ここに本番用の長いランダム文字列を貼る#$KEY#" deploy/gunicorn-shiftmanager.service \
+#     | sudo tee /etc/systemd/system/shiftmanager.service >/dev/null
+#   sudo chmod 640 /etc/systemd/system/shiftmanager.service
 #
-# ⚠️ SECRET_KEY や DB パスワードは、この root 権限で保護されたファイルに置く。
+# ⚠️ 鍵は英数字のみにする。systemd の Environment= は % と $ を特別扱いするため、
+#    記号入りの鍵（get_random_secret_key 等）は無効化され、各ワーカーが別鍵になり
+#    「勝手にログアウト」する原因になる。
+# ⚠️ SECRET_KEY や DB パスワードは、この root 権限で保護されたファイル(chmod 640)に置く。
 #    リポジトリ（Git）には絶対に入れない。
 
 [Unit]
