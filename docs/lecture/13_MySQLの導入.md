@@ -1,6 +1,8 @@
 # 13章 MySQLの導入 ― 稼働中の本番をアップデートする
 
 > 🔰 この章は **運用編** です。[12章](12_本番運用.md) で公開した本番（Nginx + Gunicorn + systemd、DBは **SQLite**）が**すでに動いていて、クルーが実際にシフトを提出している**前提で、そこへ MySQL を後から導入します。新規構築ではなく「**稼働中のシステムにアップデートを適用する**」作業として進めます。
+>
+> 前提環境（Ubuntu/WSL2・`systemd`・`apt`）と、`/home/nagin/ShiftManager`・ユーザー `nagin`・サービス名 `shiftmanager` の読み替えは [12章の「前提環境／置換早見表」](12_本番運用.md) と同じです。自分の環境に合わせて置き換えてください。
 
 実運用でDBを入れ替えるときの肝は次の3つです。本章はこれを軸に組み立てます。
 
@@ -247,6 +249,7 @@ $ sudo systemctl restart shiftmanager
 - **`mysqlclient` が pip で入らない** → OSの開発ライブラリ不足（13-2の `default-libmysqlclient-dev build-essential pkg-config`）。
 - **`Access denied for user 'shift'@'...'`** → ユーザーの**ホスト指定**ズレ。`HOST=localhost`（ソケット）なら `'shift'@'localhost'`、`127.0.0.1`（TCP）なら `'shift'@'127.0.0.1'` か `@'%'` が必要。本章は `localhost` に統一。
 - **`loaddata` で IntegrityError（duplicate entry）** → `dumpdata` で `contenttypes` と `auth.permission` を除外し忘れている（13-5②）。
+- **`Authentication plugin 'caching_sha2_password' ...` で接続できない** → MySQL 8 の既定認証に古いドライバが対応していない。`./venv/bin/pip install -U mysqlclient` でドライバを最新化する（本章のmysqlclient 2.2系なら通常は問題なし）。
 - **日本語が文字化け** → DBの文字コードが `utf8mb4` か、`OPTIONS={'charset':'utf8mb4'}` を確認。
 - **切替後に全ページ 500** → `DB_PASSWORD` の誤り、または MySQL 未起動（`systemctl status mysql`）。まずロールバック（13-8）して落ち着いて確認。
 
