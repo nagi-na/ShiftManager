@@ -114,6 +114,8 @@ media/
 .git/
 .env
 deploy/certs/
+.claude/
+docs/
 ```
 
 ## 19-5. ビルドして単体で動かしてみる
@@ -170,6 +172,7 @@ SECRET_KEY=英数字64文字くらいのランダム
 DB_PASSWORD=アプリ用DBパスワード
 DB_ROOT_PASSWORD=MySQLのroot用パスワード
 ALLOWED_HOSTS=localhost,127.0.0.1
+HTTP_PORT=80          # 公開ポート（既定80。ホストの80が埋まっていれば 8080 等に）
 ```
 
 > ⚠️ `.env` には秘密情報が入るので **絶対にコミットしない**（`.dockerignore`/`.gitignore` に `.env`）。SECRET_KEY は英数字推奨（記号は `.env` の引用符でハマりやすい）。
@@ -229,7 +232,7 @@ services:
 
   nginx:                                 # 前段Webサーバー
     image: nginx:1.27
-    ports: ["80:80"]                     # 外に公開するのはここだけ
+    ports: ["${HTTP_PORT:-80}:80"]       # 公開ポート(既定80)。外に出すのはここだけ
     volumes:
       - ./deploy/nginx-docker.conf:/etc/nginx/conf.d/default.conf:ro
       - staticfiles:/app/staticfiles:ro

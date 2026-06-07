@@ -1,0 +1,14 @@
+# イメージに含めないもの（.gitignore と同じ発想）
+venv/
+.venv/
+*.pyc
+__pycache__/
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+.git/
+.env
+deploy/certs/
+.claude/
+docs/
