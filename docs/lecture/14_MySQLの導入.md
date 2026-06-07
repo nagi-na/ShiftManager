@@ -4,11 +4,15 @@
 >
 > 前提環境（Ubuntu/WSL2・`systemd`・`apt`）と、`/home/nagin/ShiftManager`・ユーザー `nagin`・サービス名 `shiftmanager` の読み替えは [13章の「前提環境／置換早見表」](13_本番運用.md) と同じです。自分の環境に合わせて置き換えてください。
 
-実運用でDBを入れ替えるときの肝は次の3つです。本章はこれを軸に組み立てます。
+> ⚠️ **方針（[12章](12_開発編のまとめ.md) の環境分離の原則）：MySQL は「本番のデータベース」。開発（SQLite）とは分け、本番DBに開発の練習データを入れません。**
+> - **新規に本番を立てる場合（基本）**：空のMySQLに `migrate` でテーブルを作り、`createsuperuser` で**本物の管理者**を作成。クルー等の実アカウントはアプリの管理画面から作る（14-5 の「新規」）。
+> - **データ移行が要る場合だけ**：**すでにSQLiteで本物の運用データがある**ときに限り `dumpdata`→`loaddata` で移す。**開発・練習で作ったデータは本番DBに流し込まない**（14-5 の「移行」）。
 
-1. **データを失わない** ― 既存の提出データを MySQL へ移す（dumpdata → loaddata）。
+実運用でDBを用意するときの肝は次の3つです。本章はこれを軸に組み立てます。
+
+1. **データを混ぜない／失わない** ― 本番DBは開発と分ける。本物の運用データがある場合のみ、失わずに移す。
 2. **停止時間を最小に** ― 止めずにできる準備と、短いメンテで行う切替を分ける。
-3. **いつでも戻せる** ― SQLite ファイルを残し、設定1つでロールバックする。
+3. **いつでも戻せる** ― 移行する場合は SQLite ファイルを残し、設定1つでロールバックする。
 
 ---
 
@@ -123,50 +127,52 @@ $ sudo mysql -e "CREATE DATABASE IF NOT EXISTS shift_manager CHARACTER SET utf8m
 
 ---
 
-## 14-5. 【メンテ開始】データを移す
+## 14-5. 本番データベースを用意する
 
-ここからが実際の入れ替えです。利用が少ない時間に、できれば「提出を一時停止する」案内を出してから短時間で行います。
+本番のMySQLにテーブルを作ります。これは**開発のSQLiteとは別のデータベース**です。通常はここから「新規」で始めます。
 
-### ① まず SQLite をバックアップ（保険）
+### 基本：新規に本番DBを用意する（推奨）
 
-```
-$ cp db.sqlite3 db.sqlite3.bak
-```
-
-### ② SQLite からデータを書き出す（dumpdata）
+空のMySQLにスキーマを作り、**本物の管理者を1人だけ**作ります。**開発の練習データは持ち込みません。**
 
 ```
+# ① テーブルを作成（migrate）
+$ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
+    ./venv/bin/python manage.py migrate
+
+# ② 本番の管理者を作成（createsuperuser）
+$ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
+    ./venv/bin/python manage.py createsuperuser
+```
+
+`Applying ... OK` が並べばテーブル作成完了。あとは**アプリの管理画面（S6 アカウント管理）**からクルー等の実アカウントを作成します。こうすれば本番DBには**本物のデータだけ**が入ります。
+
+### 移行：既存の「本物の運用データ」を移す場合だけ
+
+**すでにSQLiteで本番運用していて、移したい本物のデータがある**ときに限り、`dumpdata`→`loaddata` を使います。
+
+> ⚠️ **開発・テストで作った練習データを本番DBに流し込まないこと。** 移すのは本物の運用データだけです（[12章](12_開発編のまとめ.md) の環境分離）。混ぜると本物と練習の区別が付かなくなります。
+
+```
+# (保険) まずバックアップ: cp db.sqlite3 db.sqlite3.bak
+# 本物データのある環境で、SQLiteから書き出す
 $ ./venv/bin/python manage.py dumpdata \
     --natural-foreign --natural-primary \
     --exclude contenttypes --exclude auth.permission \
     --exclude sessions.session --exclude admin.logentry \
     --indent 2 -o datadump.json
-```
 
-- `--exclude contenttypes` / `--exclude auth.permission`: これらは次の `migrate` が**自動で作り直す**テーブルです。書き出しに含めると、流し込み時に重複して `IntegrityError` になります。だから除外します。
-- `--natural-foreign --natural-primary`: contenttype などへの参照を、数値IDではなく「アプリ名＋モデル名」で表現し、移行先でもズレないようにします。
-- `sessions`（ログインセッション）は移さなくてよいので除外。
-
-> ⚠️ `datadump.json` には**個人データやパスワードハッシュが入る**ので、`.gitignore` に入れ、移行後は削除します。
-
-### ③ MySQL に空のテーブルを作る（migrate）
-
-```
-$ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
-    ./venv/bin/python manage.py migrate
-```
-
-`Applying ... OK` が並べば、MySQL 側にアプリの全テーブルができています。
-
-### ④ データを流し込む（loaddata）
-
-```
+# migrate 済みの本番MySQLへ流し込む（dumpに管理者が含まれるので createsuperuser は不要）
 $ DJANGO_DB=mysql DB_PASSWORD='<14-4のパスワード>' \
     ./venv/bin/python manage.py loaddata datadump.json
 Installed N object(s) from 1 fixture(s)
 ```
 
-`Installed N object(s)` が出れば、既存のユーザー・期間・提出データが MySQL に入りました。
+- `--exclude contenttypes` / `--exclude auth.permission`: `migrate` が**自動で作り直す**テーブル。含めると `IntegrityError` になるので除外。
+- `--natural-foreign --natural-primary`: contenttype 参照を「アプリ名＋モデル名」で表し、移行先でズレないように。
+- `sessions`（ログインセッション）は移さなくてよいので除外。
+
+> ⚠️ `datadump.json` には**個人データ・パスワードハッシュ**が入るので、`.gitignore` に入れ、移行後は削除します。
 
 ---
 
@@ -257,9 +263,9 @@ $ sudo systemctl restart shiftmanager
 
 ## この章のまとめ
 
-- 稼働中の本番を止めずに準備し、短いメンテでデータ移行＋接続先切替を行った。
-- `dumpdata`（contenttypes等を除外）→ `migrate` → `loaddata` で**データを保全**して移行した。
-- systemd drop-in で接続先を切替え、**SQLiteファイルを残すことでいつでもロールバック**できるようにした。
+- MySQL は**本番のデータベース**。開発(SQLite)とは分け、**本番DBに開発の練習データを入れない**（[12章](12_開発編のまとめ.md) の環境分離）。
+- 基本は**新規DB**：`migrate`＋`createsuperuser`で空から始め、実アカウントはアプリで作成。**本物の運用データがある場合だけ** `dumpdata`→`loaddata` で移行する（contenttypes等を除外）。
+- 接続先は systemd drop-in で切替え、移行する場合は **SQLite ファイルを残してロールバック**可能にした。
 - バックアップは `mysqldump` に切り替えた。
 
 これで、シフト提出アプリは同時アクセスにも強い MySQL バックエンドで運用できるようになりました。
