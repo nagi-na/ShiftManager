@@ -28,9 +28,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', get_random_secret_key())
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# 環境変数 DJANGO_DEBUG が "0" のとき本番モード（既定は開発モード=True）。
+DEBUG = os.environ.get('DJANGO_DEBUG', '1') != '0'
 
-ALLOWED_HOSTS = []
+# 本番（DEBUG=False）では、接続を許可するホスト名をカンマ区切りで指定する。
+# 例: DJANGO_ALLOWED_HOSTS="example.com,127.0.0.1"
+ALLOWED_HOSTS = (
+    [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+    if not DEBUG
+    else []
+)
 
 
 # Application definition

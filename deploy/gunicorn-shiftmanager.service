@@ -1,0 +1,33 @@
+# Gunicorn を systemd で常駐させる定義（Step 5 で使用）
+#
+# 適用:
+#   sudo cp deploy/gunicorn-shiftmanager.service /etc/systemd/system/shiftmanager.service
+#   # ↑ コピー後、SECRET_KEY を本番用の値に書き換える（下記の生成コマンド参照）
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now shiftmanager
+#
+# 本番用の SECRET_KEY を生成する:
+#   ./venv/bin/python -c "from django.core.management.utils import get_random_secret_key as g; print(g())"
+#
+# ⚠️ SECRET_KEY や DB パスワードは、この root 権限で保護されたファイルに置く。
+#    リポジトリ（Git）には絶対に入れない。
+
+[Unit]
+Description=ShiftManager Gunicorn daemon
+After=network.target
+
+[Service]
+User=nagin
+Group=nagin
+WorkingDirectory=/home/nagin/ShiftManager
+Environment=DJANGO_DEBUG=0
+Environment=DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+Environment=DJANGO_SECRET_KEY=ここに本番用の長いランダム文字列を貼る
+ExecStart=/home/nagin/ShiftManager/venv/bin/gunicorn \
+    shift_manager.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 3
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

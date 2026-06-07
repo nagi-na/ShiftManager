@@ -1,6 +1,9 @@
 # Webフレームワーク
 Django>=5.1,<5.2
 
+# 本番用WSGIサーバー（runserverの代わりにアプリを動かす）
+gunicorn>=23,<27
+
 # 本番DB(MySQL)接続ドライバ。
 # 利用前に OS 側の依存が必要:
 #   sudo apt install pkg-config default-libmysqlclient-dev build-essential
