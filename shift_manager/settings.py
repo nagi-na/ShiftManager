@@ -39,21 +39,6 @@ ALLOWED_HOSTS = (
     else []
 )
 
-# --- HTTPS（Nginx等でTLS終端しGunicornへ中継する構成）向け設定。環境変数で有効化 ---
-# 上位プロキシがHTTPSで受けたことを X-Forwarded-Proto で伝える前提で、Djangoに知らせる
-if os.environ.get('DJANGO_BEHIND_TLS_PROXY') == '1':
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# HTTPS配信時に信頼するオリジン（POST/CSRF用）。カンマ区切りで指定
-_csrf_origins = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
-if _csrf_origins:
-    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
-
-# Cookie を HTTPS のみで送る（HTTPS公開時に有効化）
-if os.environ.get('DJANGO_SECURE_COOKIES') == '1':
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
 
 # Application definition
 
