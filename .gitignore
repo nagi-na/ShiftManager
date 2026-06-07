@@ -27,3 +27,6 @@ staffpass.txt
 
 # DB移行用の一時ダンプ（個人データ・パスワードハッシュを含む。移行後は削除）
 datadump.json
+
+# TLS証明書・秘密鍵（mkcert等で生成。秘密鍵は絶対にコミットしない）
+deploy/certs/
