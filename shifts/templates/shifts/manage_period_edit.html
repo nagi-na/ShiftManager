@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}期間の編集 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">対象期間の編集</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_periods' %}">← 一覧へ</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <div class="col-12">
+        <label class="form-label small mb-0">タイトル（任意）</label>
+        {{ form.title }}
+      </div>
+      <div class="col-6">
+        <label class="form-label small mb-0">開始日</label>
+        {{ form.start_date }}
+      </div>
+      <div class="col-6">
+        <label class="form-label small mb-0">終了日</label>
+        {{ form.end_date }}
+      </div>
+      <div class="col-8">
+        <label class="form-label small mb-0">締切日時</label>
+        {{ form.deadline }}
+      </div>
+      <div class="col-4">
+        <label class="form-label small mb-0">状態</label>
+        {{ form.status }}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label small mb-0">締切後の扱い</label>
+        {{ form.post_deadline_policy }}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label small mb-0">編集最終期限（任意）</label>
+        {{ form.edit_deadline }}
+        <div class="form-text">「締切後も編集可」を選んだとき有効。空なら手動で締め切るまで編集可。</div>
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          {{ form.is_visible }}
+          <label class="form-check-label small">クルーに表示する（オフで非表示）</label>
+        </div>
+      </div>
+      {% if form.errors %}
+        <div class="col-12"><div class="alert alert-danger mb-0 py-2 small">
+          {% for field, errs in form.errors.items %}{{ field }}: {{ errs|join:" / " }}<br>{% endfor %}
+        </div></div>
+      {% endif %}
+      <div class="col-12 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

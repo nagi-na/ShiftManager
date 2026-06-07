@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}提出状況一覧 | {{ period }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">提出状況一覧</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+<p class="text-muted small mb-3">
+  {{ period }}（{{ period.start_date }} 〜 {{ period.end_date }}）<br>
+  締切: {{ period.deadline|date:"Y/m/d H:i" }} ／ 提出: {{ submitted_count }} / {{ total_count }} 名
+</p>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="text-nowrap">クルー</th>
+          {% for h in date_headers %}
+            <th class="text-center text-nowrap">{{ h.date|date:"n/j" }}<br><small>{{ h.weekday }}</small></th>
+          {% endfor %}
+          <th class="text-nowrap">備考 / 履歴</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table %}
+        <tr class="{% if not row.submitted %}table-danger{% endif %}">
+          <td class="text-nowrap">
+            {{ row.staff.name|default:row.staff.username }}
+            {% if not row.submitted %}<span class="badge bg-danger">未提出</span>{% endif %}
+          </td>
+          {% for cell in row.cells %}
+            <td class="text-center text-nowrap">
+              {% if cell %}
+                {% if cell.is_available %}
+                  {{ cell.start_time }}–{{ cell.end_time }}
+                {% else %}
+                  <span class="text-muted">×</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-nowrap">
+            {% if row.submitted %}
+              {% if row.request.note %}<div class="small">{{ row.request.note }}</div>{% endif %}
+              <a class="small" href="{% url 'request_history' row.request.pk %}">変更履歴</a>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="text-muted small mt-2">× = 出勤不可 ／ 空欄 = 入力なし ／ 赤い行 = 未提出</p>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}ホーム | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">{% if is_manager %}対象期間（管理）{% else %}シフト提出{% endif %}</h1>
+  {% if is_manager %}
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">管理メニュー</a>
+  {% endif %}
+</div>
+
+{% if not items %}
+  <div class="alert alert-secondary">
+    {% if is_manager %}まだ対象期間がありません。「管理メニュー」→「期間・締切設定」から作成してください。
+    {% else %}現在、提出できる期間はありません。{% endif %}
+  </div>
+{% endif %}
+
+<div class="row g-3">
+  {% for item in items %}
+  <div class="col-12 col-md-6">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <h2 class="h6 mb-1">{{ item.period }}</h2>
+          {% if item.is_closed %}
+            <span class="badge bg-secondary">締切</span>
+          {% else %}
+            <span class="badge bg-success">募集中</span>
+          {% endif %}
+        </div>
+        <p class="text-muted small mb-2">
+          期間: {{ item.period.start_date }} 〜 {{ item.period.end_date }}<br>
+          締切: {{ item.period.deadline|date:"Y/m/d H:i" }}
+          {% if item.manually_closed %}<br><span class="text-danger">管理者により締め切られました</span>{% endif %}
+        </p>
+
+        {% if is_manager %}
+          <a class="btn btn-primary btn-sm" href="{% url 'period_status' item.period.pk %}">提出状況を見る</a>
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'confirmed_shift' item.period.pk %}">確定シフト</a>
+        {% else %}
+          {# クルー向け: 提出状況バッジ #}
+          {% if item.submitted %}
+            <span class="badge bg-info text-dark mb-2">提出済み</span>
+          {% else %}
+            <span class="badge bg-warning text-dark mb-2">未提出</span>
+          {% endif %}
+          <div class="mt-2">
+            {% if item.can_submit %}
+              <a class="btn btn-primary btn-sm" href="{% url 'shift_submit' item.period.pk %}">
+                {% if item.submitted %}編集する{% elif item.is_closed %}提出する（締切超過）{% else %}提出する{% endif %}
+              </a>
+            {% else %}
+              <a class="btn btn-outline-secondary btn-sm" href="{% url 'shift_submit' item.period.pk %}">提出済みを確認</a>
+              <span class="text-muted small d-block mt-1">締切後のため編集できません</span>
+            {% endif %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'confirmed_shift' item.period.pk %}">確定シフト</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

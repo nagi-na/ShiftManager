@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}設定 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">設定</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">アカウント情報</h2>
+    <div class="mb-2">
+      <label class="form-label small mb-0">ログインID（変更できません）</label>
+      <input type="text" class="form-control" value="{{ user.username }}" disabled>
+    </div>
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <div class="col-12 col-md-8">
+        <label class="form-label small mb-0">メールアドレス（任意）</label>
+        {{ form.email }}
+        {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors|join:" / " }}</div>{% endif %}
+        <div class="form-text">締切のお知らせなどに利用する予定です（任意）。</div>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary btn-sm">メールを保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h6 mb-2">パスワード</h2>
+    <p class="text-muted small mb-2">初期パスワードから変更することをおすすめします。</p>
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'password_change' %}">パスワードを変更する</a>
+  </div>
+</div>
+{% endblock %}

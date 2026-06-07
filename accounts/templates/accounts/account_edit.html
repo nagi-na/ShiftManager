@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}アカウント編集 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">アカウント編集</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_accounts' %}">← 一覧へ</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">基本情報</h2>
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <div class="col-6">
+        <label class="form-label small mb-0">ログインID</label>
+        {{ form.username }}
+      </div>
+      <div class="col-6">
+        <label class="form-label small mb-0">名前</label>
+        {{ form.name }}
+      </div>
+      <div class="col-6">
+        <label class="form-label small mb-0">メール（任意）</label>
+        {{ form.email }}
+      </div>
+      <div class="col-3">
+        <label class="form-label small mb-0">ロール</label>
+        {{ form.role }}
+      </div>
+      <div class="col-3 d-flex align-items-end">
+        <div class="form-check">
+          {{ form.is_active }}
+          <label class="form-check-label small">有効</label>
+        </div>
+      </div>
+      {% if form.errors %}
+        <div class="col-12"><div class="alert alert-danger mb-0 py-2 small">
+          {% for field, errs in form.errors.items %}{{ field }}: {{ errs|join:" / " }}<br>{% endfor %}
+        </div></div>
+      {% endif %}
+      <div class="col-12 mt-2">
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h6 mb-2">パスワード再発行</h2>
+    <p class="text-muted small mb-2">
+      新しいパスワードを自動発行します。発行後に画面に表示されるので、本人に伝えてください。
+    </p>
+    <form method="post" action="{% url 'manage_account_reset' target.pk %}"
+          onsubmit="return confirm('パスワードを再発行します。よろしいですか？');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-sm">パスワードを再発行</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}変更履歴 | {{ req }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">変更履歴</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+<p class="text-muted small mb-3">
+  {{ req.user.name|default:req.user.username }} ／ {{ req.period }}
+</p>
+
+{% if not histories %}
+  <div class="alert alert-secondary">履歴がありません。</div>
+{% endif %}
+
+{% for h in histories %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header d-flex justify-content-between">
+    <span>バージョン {{ h.version_no }}</span>
+    <span class="text-muted small">{{ h.created_at|date:"Y/m/d H:i" }}</span>
+  </div>
+  <div class="card-body">
+    <table class="table table-sm mb-2">
+      <tbody>
+        {% for d in h.snapshot.days %}
+        <tr>
+          <td class="text-nowrap">{{ d.work_date }}</td>
+          <td>
+            {% if d.is_available %}{{ d.start_time }}–{{ d.end_time }}{% else %}<span class="text-muted">×（不可）</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if h.snapshot.note %}<div class="small text-muted">備考: {{ h.snapshot.note }}</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

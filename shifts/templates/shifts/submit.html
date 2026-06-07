@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}シフト提出 | {{ period }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">シフト希望の提出</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+<p class="text-muted small mb-3">
+  対象期間: {{ period.start_date }} 〜 {{ period.end_date }}<br>
+  締切: {{ period.deadline|date:"Y/m/d H:i" }}
+</p>
+
+{% if manually_closed %}
+  <div class="alert alert-secondary">
+    この期間は締切日時（{{ period.deadline|date:"Y/m/d H:i" }}）より前ですが、<strong>管理者により締め切られました</strong>。
+  </div>
+{% endif %}
+{% if notice %}
+  <div class="alert alert-{{ notice.0 }}">{{ notice.1 }}</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  {% if formset.non_form_errors %}
+    <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+  {% endif %}
+
+  <p class="text-muted small mb-2">
+    出勤する日は開始・終了時刻を選んでください。<strong>出勤できない日だけ「休み」にチェック</strong>します。
+  </p>
+
+  <div class="card shadow-sm mb-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>日付</th>
+            <th class="text-center">休み</th>
+            <th>開始</th>
+            <th>終了</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% with form=row.form %}
+          <tr class="{% if form.non_field_errors %}table-danger{% endif %}">
+            <td class="text-nowrap">
+              {{ form.work_date }}
+              {{ row.date|date:"n/j" }}（{{ row.weekday }}）
+            </td>
+            <td class="text-center">{{ form.is_day_off }}</td>
+            <td>{{ form.start_time }}</td>
+            <td>{{ form.end_time }}</td>
+          </tr>
+          {% if form.non_field_errors %}
+          <tr class="table-danger">
+            <td colspan="4" class="text-danger small">{{ form.non_field_errors|join:" / " }}</td>
+          </tr>
+          {% endif %}
+          {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">{{ note_form.note.label }}</label>
+    {{ note_form.note }}
+    <div class="form-text">出られない日の理由などを記入できます。</div>
+  </div>
+
+  {% if not read_only %}
+    <button type="submit" class="btn btn-primary">この内容で提出する</button>
+  {% endif %}
+  {% if submitted and request_obj %}
+    <a class="btn btn-outline-secondary ms-2" href="{% url 'request_history' request_obj.pk %}">変更履歴を見る</a>
+  {% endif %}
+</form>
+
+<script>
+  // 「休み」チェックに応じて時刻入力の有効/無効を切り替える
+  // チェックあり(=休み) → 時刻を無効化・クリア。チェックなし(=出勤) → 時刻を有効化。
+  function syncRow(checkbox) {
+    var tr = checkbox.closest('tr');
+    var times = tr.querySelectorAll('.time-input');
+    times.forEach(function (t) {
+      t.disabled = checkbox.checked;
+      if (checkbox.checked) { t.value = ''; }
+    });
+  }
+  document.querySelectorAll('.dayoff-toggle').forEach(function (cb) {
+    if (!cb.disabled) {
+      syncRow(cb);
+      cb.addEventListener('change', function () { syncRow(cb); });
+    }
+  });
+</script>
+{% endblock %}

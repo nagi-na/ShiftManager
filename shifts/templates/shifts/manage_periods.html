@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}期間・締切設定 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">期間・締切設定</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">← 管理メニュー</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">新しい対象期間を作成</h2>
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <div class="col-12">
+        <label class="form-label small mb-0">タイトル（任意）</label>
+        {{ form.title }}
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-0">開始日</label>
+        {{ form.start_date }}
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-0">終了日</label>
+        {{ form.end_date }}
+      </div>
+      <div class="col-8 col-md-4">
+        <label class="form-label small mb-0">締切日時</label>
+        {{ form.deadline }}
+      </div>
+      <div class="col-4 col-md-2">
+        <label class="form-label small mb-0">状態</label>
+        {{ form.status }}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label small mb-0">締切後の扱い</label>
+        {{ form.post_deadline_policy }}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label small mb-0">編集最終期限（任意）</label>
+        {{ form.edit_deadline }}
+        <div class="form-text">「締切後も編集可」を選んだとき有効。空なら手動で締め切るまで編集可。</div>
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          {{ form.is_visible }}
+          <label class="form-check-label small">クルーに表示する（オフで非表示）</label>
+        </div>
+      </div>
+      {% if form.errors %}
+        <div class="col-12"><div class="alert alert-danger mb-0 py-2 small">
+          {% for field, errs in form.errors.items %}{{ field }}: {{ errs|join:" / " }}<br>{% endfor %}
+        </div></div>
+      {% endif %}
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary btn-sm">作成</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>タイトル</th>
+          <th>期間</th>
+          <th>締切</th>
+          <th>状態</th>
+          <th>提出</th>
+          <th class="text-center">提出状況</th>
+          <th class="text-center">クルー表示</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.period.title|default:"(無題)" }}</td>
+          <td class="text-nowrap small">{{ item.period.start_date }}〜{{ item.period.end_date }}</td>
+          <td class="text-nowrap small">
+            {{ item.period.deadline|date:"Y/m/d H:i" }}
+            {% if item.manually_closed %}<br><span class="text-danger small">手動締切</span>{% endif %}
+          </td>
+          <td>
+            {% if item.is_closed %}<span class="badge bg-secondary">締切</span>
+            {% else %}<span class="badge bg-success">募集中</span>{% endif %}
+          </td>
+          <td>{{ item.request_count }}</td>
+
+          {# 提出状況確認（専用の枠） #}
+          <td class="text-center">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'period_status' item.period.pk %}">確認</a>
+          </td>
+
+          {# 表示/非表示（専用の枠・トグルスイッチ） #}
+          <td class="text-center">
+            <form method="post" action="{% url 'manage_period_toggle_visible' item.period.pk %}" class="m-0">
+              {% csrf_token %}
+              <div class="form-check form-switch d-flex justify-content-center mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       title="クルーへの表示を切り替え"
+                       {% if item.period.is_visible %}checked{% endif %}
+                       onchange="this.form.submit()">
+              </div>
+              <div class="small {% if item.period.is_visible %}text-success{% else %}text-muted{% endif %}">
+                {% if item.period.is_visible %}表示中{% else %}非表示{% endif %}
+              </div>
+            </form>
+          </td>
+
+          {# 操作（編集・締切・削除のみ） #}
+          <td class="text-nowrap">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_period_edit' item.period.pk %}">編集</a>
+            <form method="post" action="{% url 'manage_period_close' item.period.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button class="btn btn-outline-warning btn-sm" type="submit">
+                {% if item.period.status == 'closed' %}募集再開{% else %}締切{% endif %}
+              </button>
+            </form>
+            <form method="post" action="{% url 'manage_period_delete' item.period.pk %}" class="d-inline"
+                  onsubmit="return confirm('この期間を削除します。{% if item.request_count %}提出 {{ item.request_count }} 件も一緒に削除されます。{% endif %}よろしいですか？');">
+              {% csrf_token %}
+              <button class="btn btn-outline-danger btn-sm" type="submit">削除</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">対象期間がありません。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

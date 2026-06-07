@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}確定シフト | {{ period }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">確定シフト</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+<p class="text-muted small mb-3">
+  {{ period }}（{{ period.start_date }} 〜 {{ period.end_date }}）
+</p>
+
+{% if not files %}
+  <div class="alert alert-secondary">まだ確定シフトは公開されていません。</div>
+{% else %}
+  <div class="list-group mb-3">
+    {% for cs in files %}
+    <div class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <a href="{{ cs.file.url }}" target="_blank">{{ cs.original_name|default:"確定シフト.pdf" }}</a>
+        <div class="text-muted small">{{ cs.uploaded_at|date:"Y/m/d H:i" }} にアップロード</div>
+      </div>
+      {% if user.can_manage %}
+      <form method="post" onsubmit="return confirm('削除しますか？');" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="delete_id" value="{{ cs.pk }}">
+        <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if user.can_manage %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h6">確定シフトをアップロード（PDF）</h2>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="mb-2">
+        {{ form.file }}
+        {% if form.file.errors %}<div class="text-danger small">{{ form.file.errors|join:" / " }}</div>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">アップロード</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
