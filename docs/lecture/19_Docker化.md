@@ -191,7 +191,7 @@ server {
     location /media/  { alias /app/media/; }
     location / {
         proxy_pass http://web:8000;                  # web＝アプリのサービス名
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;            # ポートも保持（CSRFのOrigin照合）
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
@@ -260,6 +260,8 @@ $ docker compose ps
 # 初回だけ：DBにテーブルを作り、管理者を作成（webコンテナの中で実行）
 $ docker compose exec web python manage.py migrate
 $ docker compose exec web python manage.py createsuperuser
+# このアプリの管理権限は role で判定。createsuperuser は role を付けないので admin にする
+$ docker compose exec web python manage.py shell -c "from accounts.models import User; u=User.objects.get(username='admin'); u.role='admin'; u.save()"
 ```
 
 ブラウザで `http://localhost/` を開き、ログインできれば成功です（静的ファイルも当たっているはず）。
