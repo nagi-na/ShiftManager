@@ -382,6 +382,20 @@ def _payload_rows(payload):
     return rows
 
 
+def _prune_processed_requests(user, keep=10):
+    """ユーザーの処理済み（承認/却下）申請を新しい順に keep 件だけ残し、古いものを削除する。"""
+    processed = (
+        user.fixed_shift_requests.exclude(
+            status=FixedShiftChangeRequest.Status.PENDING
+        )
+        .order_by("-created_at")
+        .values_list("id", flat=True)
+    )
+    old_ids = list(processed[keep:])  # 11件目以降（古い側）
+    if old_ids:
+        FixedShiftChangeRequest.objects.filter(id__in=old_ids).delete()
+
+
 def _apply_payload(user, payload):
     """payload の内容で、ユーザーの固定シフトを全置換する。"""
     with transaction.atomic():
@@ -597,6 +611,8 @@ def manage_fixed_shift_request_review(request, pk):
                 req.status = Status.REJECTED
                 msg = f"「{req.user.name}」の固定シフト変更を却下しました。"
             req.save()
+            # 処理済みはクルーごとに直近10件だけ残す
+            _prune_processed_requests(req.user)
             messages.success(request, msg)
             return redirect("manage_fixed_shift_requests")
 

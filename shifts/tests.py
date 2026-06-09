@@ -501,6 +501,39 @@ class FixedShiftRequestApprovalTests(TestCase):
         resp = self.client.get(reverse("my_fixed_shift"))
         self.assertContains(resp, "曜日を調整してください")
 
+    def test_processed_pruned_to_last_10_per_user(self):
+        from shifts.views import _prune_processed_requests
+
+        base = timezone.now()
+        reqs = []
+        for i in range(11):
+            r = FixedShiftChangeRequest.objects.create(
+                user=self.crew,
+                status=FixedShiftChangeRequest.Status.APPROVED,
+                payload=[],
+                reviewer=self.leader,
+            )
+            # created_at は auto_now_add のため、後から明示的にずらす
+            FixedShiftChangeRequest.objects.filter(pk=r.pk).update(
+                created_at=base + timedelta(minutes=i)
+            )
+            reqs.append(r)
+        # 別クルーの処理済みは巻き込まれないこと
+        other = User.objects.create_user("crew_other", password="x")
+        FixedShiftChangeRequest.objects.create(
+            user=other, status=FixedShiftChangeRequest.Status.REJECTED, payload=[]
+        )
+
+        _prune_processed_requests(self.crew)
+
+        remaining = FixedShiftChangeRequest.objects.filter(user=self.crew)
+        self.assertEqual(remaining.count(), 10)              # 直近10件に剪定
+        self.assertFalse(remaining.filter(pk=reqs[0].pk).exists())  # 最古は削除
+        self.assertTrue(remaining.filter(pk=reqs[10].pk).exists())  # 最新は残る
+        self.assertEqual(
+            FixedShiftChangeRequest.objects.filter(user=other).count(), 1
+        )  # 別クルーは無関係
+
     def test_crew_cannot_review(self):
         self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)])
         req = FixedShiftChangeRequest.objects.get(user=self.crew)
