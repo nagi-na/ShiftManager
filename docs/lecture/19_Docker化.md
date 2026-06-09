@@ -314,6 +314,8 @@ $ docker compose exec web python manage.py shell -c "from accounts.models import
 ブラウザで `http://localhost/` を開き、ログインできれば成功です（静的ファイルも当たっているはず）。
 
 > 🔰 `docker compose exec web …`＝**動いている web コンテナの中でコマンドを実行**。`migrate` や `createsuperuser` はこの形で行います（[14章](14_MySQLの導入.md) と同じ作業をコンテナ内で実施）。**開発の練習データは持ち込まない**方針は同じです。
+>
+> 🔰 **コード更新時の `migrate`**（19-9表の「コード更新を反映」）は、`git pull` で増えたマイグレーション（差分）だけを当てるもので、**`dbdata` ボリュームの既存データは保持**されます（しくみは [2章 2-4](02_データモデルとマイグレーション.md)）。データが消えるのは `down -v` を付けたときだけ。
 
 ## 19-9. 日常の操作（compose 早見表）
 
