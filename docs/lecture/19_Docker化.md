@@ -188,7 +188,9 @@ server {
     client_max_body_size 12m;
 
     location /static/ { alias /app/staticfiles/; }   # 共有ボリュームから配信
-    location /media/  { alias /app/media/; }
+    # 確定シフト等のメディアは internal。Django(@login_required)が
+    # X-Accel-Redirect: /protected/... を返したときだけ送信（7-7）。
+    location /protected/ { internal; alias /app/media/; }
     location / {
         proxy_pass http://web:8000;                  # web＝アプリのサービス名
         proxy_set_header Host $http_host;            # ポートも保持（CSRFのOrigin照合）

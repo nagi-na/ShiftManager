@@ -19,6 +19,9 @@ services:
       DJANGO_DB: mysql
       DB_HOST: db                        # DBコンテナのサービス名で接続
       DB_PASSWORD: ${DB_PASSWORD}
+      # Cloudflare等がHTTPSを終端する構成。CSRFのOrigin照合に必要。
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
+      DJANGO_BEHIND_TLS_PROXY: "1"       # X-Forwarded-Proto=https を信頼しhttps受信と認識
     volumes:
       - staticfiles:/app/staticfiles     # Nginxと共有
       - media:/app/media
