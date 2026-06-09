@@ -17,6 +17,7 @@ from accounts.models import User
 
 from .models import (
     ConfirmedShift,
+    FixedShiftChangeRequest,
     ShiftPeriod,
     ShiftRequest,
     ShiftRequestDay,
@@ -322,12 +323,22 @@ class FixedShiftTests(TestCase):
 
     # --- 本人編集（許可フラグで制御） ---
 
-    def test_crew_without_permission_cannot_save(self):
+    def test_crew_without_permission_creates_request_not_direct_save(self):
+        # 許可が無いクルーが保存しようとすると、直接保存ではなく「変更申請」になる。
         self.client.force_login(self.crew)
         days = [{"start": "09:00", "end": "17:00"} for _ in range(7)]
-        resp = self.client.post(reverse("my_fixed_shift"), fixed_formset_data(days))
-        self.assertEqual(resp.status_code, 200)  # 保存せず再表示
+        resp = self.client.post(
+            reverse("my_fixed_shift"), {**fixed_formset_data(days), "crew_comment": "希望です"}
+        )
+        self.assertRedirects(resp, reverse("my_fixed_shift"))
+        # 固定シフトはまだ変わらない（承認前）
         self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 0)
+        # 保留の申請が1件できる
+        pend = FixedShiftChangeRequest.objects.get(
+            user=self.crew, status=FixedShiftChangeRequest.Status.PENDING
+        )
+        self.assertEqual(pend.crew_comment, "希望です")
+        self.assertEqual(len(pend.payload), 7)
 
     def test_crew_with_permission_saves(self):
         self.crew.fixed_shift_editable_by_crew = True
@@ -404,3 +415,88 @@ class FixedShiftTests(TestCase):
         self.assertIn(str(today.weekday()), resp.context["fixed_shift_json"])
         self.assertContains(resp, 'id="apply-fixed"')
         self.assertContains(resp, 'fixed-shift-data')
+
+
+class FixedShiftRequestApprovalTests(TestCase):
+    """固定シフト変更申請：申請→承認/却下→反映、再申請の上書き、コメント。"""
+
+    def setUp(self):
+        self.leader = User.objects.create_user("leader", password="x")
+        self.leader.role = User.Role.LEADER
+        self.leader.save(update_fields=["role"])
+        self.crew = User.objects.create_user("crew", password="x")  # 既定 crew・許可なし
+
+    def _submit_request(self, days, comment=""):
+        self.client.force_login(self.crew)
+        return self.client.post(
+            reverse("my_fixed_shift"),
+            {**fixed_formset_data(days), "crew_comment": comment},
+        )
+
+    def test_resubmit_overwrites_pending(self):
+        self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)], "一回目")
+        self._submit_request([{"start": "10:00", "end": "18:00"} for _ in range(7)], "二回目")
+        pend = FixedShiftChangeRequest.objects.filter(
+            user=self.crew, status=FixedShiftChangeRequest.Status.PENDING
+        )
+        self.assertEqual(pend.count(), 1)  # 上書き＝1件のまま
+        self.assertEqual(pend.first().crew_comment, "二回目")
+
+    def test_leader_approve_applies_payload(self):
+        days = [{"start": "09:00", "end": "17:00"} for _ in range(7)]
+        days[6] = {"day_off": True}  # 日曜休み
+        self._submit_request(days, "お願いします")
+        req = FixedShiftChangeRequest.objects.get(user=self.crew)
+
+        self.client.force_login(self.leader)
+        resp = self.client.post(
+            reverse("manage_fixed_shift_request_review", args=[req.pk]),
+            {"action": "approve", "review_comment": "OKです"},
+        )
+        self.assertRedirects(resp, reverse("manage_fixed_shift_requests"))
+
+        req.refresh_from_db()
+        self.assertEqual(req.status, FixedShiftChangeRequest.Status.APPROVED)
+        self.assertEqual(req.reviewer, self.leader)
+        self.assertEqual(req.review_comment, "OKです")
+        # 固定シフトに反映されている
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 7)
+        self.assertFalse(WeeklyFixedShift.objects.get(user=self.crew, weekday=6).is_available)
+
+    def test_leader_reject_keeps_fixed_shift(self):
+        self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)])
+        req = FixedShiftChangeRequest.objects.get(user=self.crew)
+
+        self.client.force_login(self.leader)
+        self.client.post(
+            reverse("manage_fixed_shift_request_review", args=[req.pk]),
+            {"action": "reject", "review_comment": "今回は見送り"},
+        )
+        req.refresh_from_db()
+        self.assertEqual(req.status, FixedShiftChangeRequest.Status.REJECTED)
+        self.assertEqual(req.review_comment, "今回は見送り")
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 0)  # 未反映
+
+    def test_crew_sees_reviewer_comment(self):
+        self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)])
+        req = FixedShiftChangeRequest.objects.get(user=self.crew)
+        self.client.force_login(self.leader)
+        self.client.post(
+            reverse("manage_fixed_shift_request_review", args=[req.pk]),
+            {"action": "reject", "review_comment": "曜日を調整してください"},
+        )
+        self.client.force_login(self.crew)
+        resp = self.client.get(reverse("my_fixed_shift"))
+        self.assertContains(resp, "曜日を調整してください")
+
+    def test_crew_cannot_review(self):
+        self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)])
+        req = FixedShiftChangeRequest.objects.get(user=self.crew)
+        self.client.force_login(self.crew)
+        resp = self.client.post(
+            reverse("manage_fixed_shift_request_review", args=[req.pk]),
+            {"action": "approve"},
+        )
+        self.assertRedirects(resp, reverse("home"))
+        req.refresh_from_db()
+        self.assertEqual(req.status, FixedShiftChangeRequest.Status.PENDING)  # 変わらない

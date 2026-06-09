@@ -14,22 +14,34 @@
   {% endif %}
 </div>
 
-<p class="text-muted small mb-3">
-  曜日ごとの定番シフトです。希望提出のとき、提出画面の「固定シフトを反映」ボタンでまとめて入力できます。<br>
-  出勤する曜日は開始・終了時刻を選び、<strong>働かない曜日は「休み」にチェック</strong>します。
-</p>
+{% if mode == 'request' %}
+  <p class="text-muted small mb-3">
+    ご自身での直接編集は許可されていないため、変更したい内容を<strong>申請</strong>します。リーダーが承認すると反映されます。<br>
+    出勤する曜日は開始・終了時刻を選び、<strong>働かない曜日は「休み」にチェック</strong>します。
+  </p>
+{% else %}
+  <p class="text-muted small mb-3">
+    曜日ごとの定番シフトです。希望提出のとき、提出画面の「固定シフトを反映」ボタンでまとめて入力できます。<br>
+    出勤する曜日は開始・終了時刻を選び、<strong>働かない曜日は「休み」にチェック</strong>します。
+  </p>
+{% endif %}
 
-{% if self_view and not editable %}
-  <div class="alert alert-secondary">
-    現在、ご自身での編集は許可されていません（<strong>閲覧のみ</strong>）。変更が必要な場合はリーダーに依頼してください。
+{% if pending %}
+  <div class="alert alert-info">
+    <strong>変更申請を承認待ちです</strong>（申請: {{ pending.created_at|date:"Y/m/d H:i" }}）。
+    下の内容を直して再申請すると、この申請を上書きします。
+    {% if pending.crew_comment %}<div class="small mt-1">あなたのコメント: {{ pending.crew_comment }}</div>{% endif %}
   </div>
 {% endif %}
 
-{% if not editable and not has_fixed_shift %}
-  <div class="alert alert-warning">
-    固定シフトはまだ登録されていません。リーダーに設定を依頼してください。
+{% if mode == 'request' and last_reviewed %}
+  <div class="alert {% if last_reviewed.status == 'approved' %}alert-success{% else %}alert-secondary{% endif %}">
+    前回の申請は<strong>{{ last_reviewed.get_status_display }}</strong>されました
+    （{{ last_reviewed.reviewed_at|date:"Y/m/d H:i" }}）。
+    {% if last_reviewed.review_comment %}<div class="small mt-1">リーダーのコメント: {{ last_reviewed.review_comment }}</div>{% endif %}
   </div>
-{% else %}
+{% endif %}
+
 <form method="post" novalidate>
   {% csrf_token %}
   {{ formset.management_form }}
@@ -73,11 +85,17 @@
     </div>
   </div>
 
-  {% if editable %}
+  {% if mode == 'request' %}
+    <div class="mb-3">
+      <label class="form-label">リーダーへのコメント（任意）</label>
+      <textarea name="crew_comment" rows="2" class="form-control">{{ crew_comment }}</textarea>
+      <div class="form-text">変更の理由や希望などを書けます。</div>
+    </div>
+    <button type="submit" class="btn btn-primary">{% if pending %}この内容で再申請する{% else %}この内容で変更を申請する{% endif %}</button>
+  {% else %}
     <button type="submit" class="btn btn-primary">固定シフトを保存する</button>
   {% endif %}
 </form>
-{% endif %}
 
 <script>
   // submit.html と同じ：「休み」チェックで時刻入力の有効/無効を切り替える

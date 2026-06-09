@@ -232,6 +232,53 @@ class WeeklyFixedShift(models.Model):
                 raise ValidationError("開始時刻は終了時刻より前にしてください。")
 
 
+class FixedShiftChangeRequest(models.Model):
+    """固定シフトの変更申請。直接編集を許可されていないクルーが提出し、リーダーが承認/却下する。
+
+    payload は週まるごと（月〜日）の提案。承認時にこの内容で固定シフトを全置換する。
+    保留(pending)は 1人1件で、再申請すると上書きする。
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "保留"
+        APPROVED = "approved", "承認"
+        REJECTED = "rejected", "却下"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="申請者",
+        on_delete=models.CASCADE,
+        related_name="fixed_shift_requests",
+    )
+    status = models.CharField(
+        "状態", max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    payload = models.JSONField(
+        "提案内容",
+        help_text="[{weekday, is_available, start_time, end_time}, ...] の7曜日分",
+    )
+    crew_comment = models.TextField("申請コメント", blank=True)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="処理者",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_fixed_shift_requests",
+    )
+    review_comment = models.TextField("処理コメント", blank=True)
+    created_at = models.DateTimeField("申請日時", auto_now_add=True)
+    reviewed_at = models.DateTimeField("処理日時", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "固定シフト変更申請"
+        verbose_name_plural = "固定シフト変更申請"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} 固定シフト変更申請（{self.get_status_display()}）"
+
+
 def confirmed_shift_upload_path(instance, filename):
     return f"confirmed_shifts/period_{instance.period_id}/{filename}"
 

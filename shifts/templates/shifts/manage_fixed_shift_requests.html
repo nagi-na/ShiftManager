@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}固定シフト申請 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">固定シフト変更申請</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">← 管理メニュー</a>
+</div>
+
+<h2 class="h6">承認待ち（{{ pending|length }} 件）</h2>
+<div class="card shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>クルー</th>
+          <th>申請日時</th>
+          <th>コメント</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in pending %}
+        <tr>
+          <td class="text-nowrap">{{ r.user.name|default:r.user.username }}</td>
+          <td class="small text-nowrap">{{ r.created_at|date:"Y/m/d H:i" }}</td>
+          <td class="small">{{ r.crew_comment|default:"-" }}</td>
+          <td class="text-nowrap">
+            <a class="btn btn-primary btn-sm" href="{% url 'manage_fixed_shift_request_review' r.pk %}">確認して承認/却下</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted">承認待ちの申請はありません。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if recent %}
+<h2 class="h6">最近の処理</h2>
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>クルー</th>
+          <th>状態</th>
+          <th>処理日時</th>
+          <th>処理者</th>
+          <th>コメント</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td class="text-nowrap">{{ r.user.name|default:r.user.username }}</td>
+          <td>
+            {% if r.status == 'approved' %}<span class="badge bg-success">承認</span>
+            {% else %}<span class="badge bg-secondary">却下</span>{% endif %}
+          </td>
+          <td class="small text-nowrap">{{ r.reviewed_at|date:"Y/m/d H:i" }}</td>
+          <td class="small text-nowrap">{{ r.reviewer.name|default:"-" }}</td>
+          <td class="small">{{ r.review_comment|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

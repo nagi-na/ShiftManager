@@ -22,6 +22,7 @@ from .forms import (
 )
 from .models import (
     ConfirmedShift,
+    FixedShiftChangeRequest,
     ShiftPeriod,
     ShiftRequest,
     ShiftRequestDay,
@@ -337,25 +338,114 @@ def _fixed_shift_rows(formset):
     ]
 
 
+def _formset_to_payload(formset):
+    """固定シフトのフォームセットを、保存/申請用の payload（曜日順の辞書リスト）にする。"""
+    payload = []
+    for form in formset:
+        cd = form.cleaned_data
+        avail = not cd.get("is_day_off", False)
+        payload.append(
+            {
+                "weekday": cd["weekday"],
+                "is_available": avail,
+                "start_time": cd.get("start_time") if avail else None,
+                "end_time": cd.get("end_time") if avail else None,
+            }
+        )
+    return payload
+
+
+def _payload_to_initial(payload):
+    """payload（辞書リスト）をフォームセットの初期値（月〜日順）に変換する。"""
+    by_wd = {d["weekday"]: d for d in payload}
+    initial = []
+    for wd in range(7):
+        d = by_wd.get(wd)
+        initial.append(
+            {
+                "weekday": wd,
+                "is_day_off": (not d["is_available"]) if d else False,
+                "start_time": d["start_time"] if d else None,
+                "end_time": d["end_time"] if d else None,
+            }
+        )
+    return initial
+
+
+def _payload_rows(payload):
+    """payload を表示用に (曜日名, 内容) で並べる（承認画面の比較表示など）。"""
+    by_wd = {d["weekday"]: d for d in payload}
+    rows = []
+    for wd in range(7):
+        d = by_wd.get(wd)
+        rows.append({"weekday": WEEKDAYS_JP[wd], "data": d})
+    return rows
+
+
+def _apply_payload(user, payload):
+    """payload の内容で、ユーザーの固定シフトを全置換する。"""
+    with transaction.atomic():
+        user.fixed_shifts.all().delete()
+        WeeklyFixedShift.objects.bulk_create(
+            [
+                WeeklyFixedShift(
+                    user=user,
+                    weekday=d["weekday"],
+                    is_available=d["is_available"],
+                    start_time=d["start_time"],
+                    end_time=d["end_time"],
+                )
+                for d in payload
+            ]
+        )
+
+
 @login_required
 def my_fixed_shift(request):
-    """クルー本人の固定シフトページ。閲覧は常時、編集は許可されているときのみ。"""
+    """クルー本人の固定シフトページ。
+
+    - 直接編集を許可されている → その場で保存（mode="edit"）。
+    - 許可されていないクルー → 変更を申請（mode="request"）。リーダー承認で反映。
+    """
     user = request.user
     editable = user.can_edit_fixed_shift_of(user)
+    mode = "edit" if editable else "request"
+    pending = user.fixed_shift_requests.filter(
+        status=FixedShiftChangeRequest.Status.PENDING
+    ).first()
+    # 直近の処理済み申請（リーダーのコメント表示用）
+    last_reviewed = (
+        user.fixed_shift_requests.exclude(
+            status=FixedShiftChangeRequest.Status.PENDING
+        ).first()
+    )
 
-    if request.method == "POST" and editable:
+    crew_comment = pending.crew_comment if pending else ""
+
+    if request.method == "POST":
         formset = FixedShiftFormSet(request.POST, prefix="fx")
+        crew_comment = request.POST.get("crew_comment", "").strip()
         if formset.is_valid():
-            _save_fixed_shift(user, formset)
-            messages.success(request, "固定シフトを保存しました。")
+            payload = _formset_to_payload(formset)
+            if mode == "edit":
+                _apply_payload(user, payload)
+                messages.success(request, "固定シフトを保存しました。")
+            else:
+                # 保留中があれば上書き、無ければ新規（1人1件）
+                FixedShiftChangeRequest.objects.update_or_create(
+                    user=user,
+                    status=FixedShiftChangeRequest.Status.PENDING,
+                    defaults={"payload": payload, "crew_comment": crew_comment},
+                )
+                messages.success(request, "固定シフトの変更を申請しました。承認をお待ちください。")
             return redirect("my_fixed_shift")
     else:
-        formset = FixedShiftFormSet(initial=_fixed_shift_initial(user), prefix="fx")
-
-    if not editable:
-        for form in formset.forms:
-            for field in form.fields.values():
-                field.widget.attrs["disabled"] = True
+        # 申請モードで保留があれば、その内容を編集の起点にする
+        if mode == "request" and pending:
+            initial = _payload_to_initial(pending.payload)
+        else:
+            initial = _fixed_shift_initial(user)
+        formset = FixedShiftFormSet(initial=initial, prefix="fx")
 
     return render(
         request,
@@ -363,10 +453,14 @@ def my_fixed_shift(request):
         {
             "formset": formset,
             "rows": _fixed_shift_rows(formset),
+            "mode": mode,
             "editable": editable,
             "target": user,
             "self_view": True,
             "has_fixed_shift": user.fixed_shifts.exists(),
+            "crew_comment": crew_comment,
+            "pending": pending,
+            "last_reviewed": last_reviewed,
         },
     )
 
@@ -418,11 +512,95 @@ def manage_fixed_shift_edit(request, user_pk):
         {
             "formset": formset,
             "rows": _fixed_shift_rows(formset),
+            "mode": "edit",
             "editable": True,
             "target": target,
             "self_view": False,
             "has_fixed_shift": target.fixed_shifts.exists(),
+            "crew_comment": "",
+            "pending": None,
+            "last_reviewed": None,
         },
+    )
+
+
+def _norm_cell(obj):
+    """固定シフト(モデル) or payload(辞書) を、比較表示用の共通形に正規化する。"""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {
+            "is_available": obj["is_available"],
+            "start": obj["start_time"],
+            "end": obj["end_time"],
+        }
+    return {"is_available": obj.is_available, "start": obj.start_time, "end": obj.end_time}
+
+
+@manager_required
+def manage_fixed_shift_requests(request):
+    """固定シフト変更申請の一覧（保留＋直近の処理済み）。"""
+    Status = FixedShiftChangeRequest.Status
+    pending = (
+        FixedShiftChangeRequest.objects.filter(status=Status.PENDING)
+        .select_related("user")
+        .order_by("created_at")
+    )
+    recent = (
+        FixedShiftChangeRequest.objects.exclude(status=Status.PENDING)
+        .select_related("user", "reviewer")[:20]
+    )
+    return render(
+        request,
+        "shifts/manage_fixed_shift_requests.html",
+        {"pending": pending, "recent": recent},
+    )
+
+
+@manager_required
+def manage_fixed_shift_request_review(request, pk):
+    """申請の詳細（現在値と提案の比較）と、承認/却下（コメント任意）。"""
+    Status = FixedShiftChangeRequest.Status
+    req = get_object_or_404(
+        FixedShiftChangeRequest.objects.select_related("user"), pk=pk
+    )
+
+    if request.method == "POST" and req.status == Status.PENDING:
+        action = request.POST.get("action")
+        comment = request.POST.get("review_comment", "").strip()
+        if action in ("approve", "reject"):
+            req.reviewer = request.user
+            req.review_comment = comment
+            req.reviewed_at = timezone.now()
+            if action == "approve":
+                _apply_payload(req.user, req.payload)
+                req.status = Status.APPROVED
+                msg = f"「{req.user.name}」の固定シフト変更を承認し、反映しました。"
+            else:
+                req.status = Status.REJECTED
+                msg = f"「{req.user.name}」の固定シフト変更を却下しました。"
+            req.save()
+            messages.success(request, msg)
+            return redirect("manage_fixed_shift_requests")
+
+    current = {ws.weekday: ws for ws in req.user.fixed_shifts.all()}
+    proposed = {d["weekday"]: d for d in req.payload}
+    compare = []
+    for wd in range(7):
+        cur = _norm_cell(current.get(wd))
+        pro = _norm_cell(proposed.get(wd))
+        compare.append(
+            {
+                "weekday": WEEKDAYS_JP[wd],
+                "current": cur,
+                "proposed": pro,
+                "changed": cur != pro,
+            }
+        )
+    return render(
+        request,
+        "shifts/manage_fixed_shift_request_review.html",
+        {"req": req, "compare": compare, "is_pending": req.status == Status.PENDING},
     )
 
 
@@ -503,10 +681,17 @@ def manage_top(request):
         role=User.Role.CREW, is_active=True
     ).count()
     open_count = sum(1 for p in ShiftPeriod.objects.all() if not _is_closed(p, now))
+    fixed_request_count = FixedShiftChangeRequest.objects.filter(
+        status=FixedShiftChangeRequest.Status.PENDING
+    ).count()
     return render(
         request,
         "shifts/manage_top.html",
-        {"staff_count": staff_count, "open_count": open_count},
+        {
+            "staff_count": staff_count,
+            "open_count": open_count,
+            "fixed_request_count": fixed_request_count,
+        },
     )
 
 

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}申請の確認 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">固定シフト変更申請：{{ req.user.name|default:req.user.username }}</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_fixed_shift_requests' %}">← 申請一覧</a>
+</div>
+
+<p class="text-muted small mb-2">申請日時: {{ req.created_at|date:"Y/m/d H:i" }}</p>
+{% if req.crew_comment %}
+  <div class="alert alert-light border"><strong>申請者のコメント：</strong>{{ req.crew_comment }}</div>
+{% endif %}
+
+{% if not is_pending %}
+  <div class="alert {% if req.status == 'approved' %}alert-success{% else %}alert-secondary{% endif %}">
+    この申請は<strong>{{ req.get_status_display }}</strong>済みです
+    （{{ req.reviewed_at|date:"Y/m/d H:i" }} / {{ req.reviewer.name|default:"-" }}）。
+    {% if req.review_comment %}<div class="small mt-1">コメント: {{ req.review_comment }}</div>{% endif %}
+  </div>
+{% endif %}
+
+<div class="card shadow-sm mb-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>曜日</th>
+          <th>現在</th>
+          <th></th>
+          <th>申請内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in compare %}
+        <tr class="{% if row.changed %}table-warning{% endif %}">
+          <td class="text-nowrap">{{ row.weekday }}</td>
+          <td class="small">
+            {% if row.current is None %}<span class="text-muted">-</span>
+            {% elif not row.current.is_available %}休
+            {% else %}{{ row.current.start }}〜{{ row.current.end }}{% endif %}
+          </td>
+          <td class="text-muted">→</td>
+          <td class="small">
+            {% if row.proposed is None %}<span class="text-muted">-</span>
+            {% elif not row.proposed.is_available %}休
+            {% else %}{{ row.proposed.start }}〜{{ row.proposed.end }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if is_pending %}
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">クルーへのコメント（任意・承認/却下どちらでも送れます）</label>
+    <textarea name="review_comment" rows="2" class="form-control"></textarea>
+  </div>
+  <button type="submit" name="action" value="approve" class="btn btn-success"
+          onclick="return confirm('この申請を承認し、固定シフトに反映します。よろしいですか？');">承認して反映</button>
+  <button type="submit" name="action" value="reject" class="btn btn-outline-danger ms-2"
+          onclick="return confirm('この申請を却下します。よろしいですか？');">却下する</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -25,7 +25,7 @@
 - 切り替えの場所（クルー管理画面 `accounts.account_list` ＝ `manage/accounts/`）：
   - **個別トグル**：各クルー行で1人ずつ許可/不許可（既存の `account_toggle_active` と同じ作り）。
   - **一斉トグル**：「**全クルーを一括で許可／不許可**」にするボタンを管理画面上部に置く（誤操作防止に確認ダイアログ）。
-- 許可されていないクルーは、自分の固定シフトを**閲覧のみ**（後述のコピー反映は使える＝閲覧と利用は別）。
+- 許可されていないクルーは、自分の固定シフトを直接は変更できないが、**変更を「申請」**できる（リーダー承認で反映。下記 2-6）。コピー反映は許可に関係なく使える（閲覧と利用は別）。
 
 ### 2-3. 「固定シフトを反映」ボタン（希望提出フォーム）
 - 提出フォーム（`shifts/templates/shifts/*` の希望入力画面）に **「固定シフトを反映」ボタン**を置く。
@@ -56,9 +56,22 @@
 
 | 画面 | 誰が見る | できること |
 | --- | --- | --- |
-| 自分の固定シフトページ | クルー本人 | 閲覧（常時）／編集（許可時のみ） |
+| 自分の固定シフトページ | クルー本人 | 閲覧（常時）／編集（許可時）／変更申請（未許可時, 2-6） |
 | 固定シフト一覧（管理） | リーダー・管理者 | 全クルーの閲覧・代理編集・一斉許可切替 |
+| 固定シフト申請（管理） | リーダー・管理者 | クルーの変更申請の承認/却下（2-6） |
 | 希望提出フォーム | クルー本人 | 「固定シフトを反映」ボタン（2-3） |
+
+### 2-6. 固定シフトの変更申請（承認制）
+
+直接編集を許可されていないクルーでも、固定シフトの変更を**申請**でき、リーダーが承認すると反映される。
+
+- クルー側（自分の固定シフトページ）：7曜日の希望を入力し、**コメント（任意）**を添えて「変更を申請」。
+  - **1人1件の保留**。再申請すると保留中の申請を上書きする。
+  - 保留中の状態と、前回の処理結果（承認/却下とリーダーのコメント）を表示。
+- リーダー側（管理メニュー「固定シフト申請」）：
+  - 承認待ち一覧（管理メニューに**保留件数バッジ**）。
+  - 申請の詳細で**現在値と提案を並べて比較**（変更行をハイライト）、申請者コメントを確認。
+  - **承認**＝提案内容（週まるごと）で固定シフトを全置換／**却下**＝反映しない。どちらでも**コメント（任意）**をクルーに返せる。
 
 ## 3. データモデルの変更
 
@@ -118,22 +131,45 @@ def can_edit_fixed_shift_of(self, target) -> bool:
 
 > 🔰 `weekday` を **月=0〜日=6** にしておくと、反映時に `date.weekday()` の戻り値でそのまま引けるので実装が単純になる。
 
+### 3-3. 変更申請モデル `FixedShiftChangeRequest`（`shifts/models.py`）
+```python
+class FixedShiftChangeRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "保留"
+        APPROVED = "approved", "承認"
+        REJECTED = "rejected", "却下"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="fixed_shift_requests")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    payload = models.JSONField()              # [{weekday,is_available,start_time,end_time}, ...] 7曜日分
+    crew_comment = models.TextField(blank=True)   # 申請時のクルーコメント
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                 null=True, blank=True, related_name="reviewed_fixed_shift_requests")
+    review_comment = models.TextField(blank=True) # 承認/却下時のリーダーコメント
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+```
+- 保留は `update_or_create(user, status=PENDING)` で1人1件に保つ（再申請＝上書き）。
+- 承認時に `payload` の内容で `WeeklyFixedShift` を全置換する。
+
 ## 4. 実装メモ（変更ファイルの見込み）
 
 - `accounts/models.py` … `fixed_shift_editable_by_crew`（`default=False`）追加（＋`can_edit_fixed_shift_of`）。
-- `shifts/models.py` … `WeeklyFixedShift` 追加。
-- フォーム … 固定シフト編集フォーム（7曜日分。`ShiftRequestDay` 同様の出勤可否＋時刻）。
-- ビュー / ルート
-  - **クルー本人ページ**：`accounts`（`profile` の近く）に `fixed_shift`（自分の固定シフト 閲覧／許可時編集）。
-  - **管理一覧**：`shifts` 側 `manage/fixed-shifts/`（全クルー一覧）＋ `manage/fixed-shifts/<user_pk>/edit/`（代理編集）。`can_manage` で保護。
-  - **個別/一斉トグル**：`accounts` に `manage/accounts/<pk>/toggle-fixed-edit/`（個別、既存 `account_toggle_active` を踏襲）と `manage/accounts/fixed-edit/bulk/`（全クルー一括、POST＋確認）。
-  - **反映用データ**：希望提出ビュー（`shift_submit`）で、対象ユーザーの固定シフトを **JSON でテンプレートへ渡す**（曜日→{available,start,end}）。
+- `shifts/models.py` … `WeeklyFixedShift`・`FixedShiftChangeRequest` 追加。
+- フォーム … 固定シフト編集フォームセット（7曜日分。`ShiftRequestDay` 同様の出勤可否＋時刻）。
+- ビュー / ルート（実装は `shifts` 側）
+  - **クルー本人ページ**：`my_fixed_shift`（`/fixed-shift/`）。許可時は直接保存（edit）、未許可時は**変更申請**（request, コメント＋保留状態表示）。
+  - **管理一覧／代理編集**：`manage_fixed_shifts`（`/manage/fixed-shifts/`）＋ `manage_fixed_shift_edit`（`.../<user_pk>/edit/`）。`@manager_required`。
+  - **申請の承認**：`manage_fixed_shift_requests`（`/manage/fixed-shift-requests/` 一覧）＋ `manage_fixed_shift_request_review`（`.../<pk>/review/` 比較＋承認/却下）。`@manager_required`。
+  - **個別/一斉トグル**：`accounts` に `manage/accounts/<pk>/toggle-fixed-edit/`（個別）と `manage/accounts/fixed-edit/bulk/`（全クルー一括、POST＋確認）。`@admin_required`。
+  - **反映用データ**：`shift_submit` で対象ユーザーの固定シフトを **JSON でテンプレートへ渡す**（曜日→{off,start,end}）。
 - テンプレート
-  - 自分の固定シフトページ（新規）、固定シフト管理一覧（新規）。
-  - `home.html`（または `profile.html`）に「固定シフトを確認」ボタン、`manage_top.html` に「固定シフト管理」リンク、クルー管理(`account_list.html`)に個別/一斉トグル。
-  - `submit.html` に「固定シフトを反映」ボタン＋確認ダイアログ＋埋め込んだ固定シフトJSONから入力欄を書き換える小さなJS。
-- `shifts/admin.py` … `WeeklyFixedShift` を管理画面に登録（代理編集の導線の一つ）。
-- `shifts/tests.py`（必要に応じ `accounts/tests.py`）… 後述の確認項目をテスト化。
+  - `fixed_shift_edit.html`（本人/代理 兼用：edit/request モード）、`manage_fixed_shifts.html`、`manage_fixed_shift_requests.html`、`manage_fixed_shift_request_review.html`。
+  - `home.html` に「固定シフトを確認」ボタン、`manage_top.html` に「固定シフト管理」「固定シフト申請（保留件数バッジ）」、クルー管理(`account_list.html`)に個別/一斉トグル。
+  - `submit.html` に「固定シフトを反映」ボタン＋確認ダイアログ＋埋め込んだJSONから入力欄を書き換える小さなJS。
+- `shifts/admin.py` … `WeeklyFixedShift`・`FixedShiftChangeRequest` を管理画面に登録。
+- `shifts/tests.py` … 権限・コピー反映・申請/承認/却下/再申請・コメントをテスト化。
 
 ### 反映ロジック（擬似コード）
 ```
@@ -182,7 +218,10 @@ docker compose exec web python manage.py migrate
 ## 6. 確認項目
 
 - [ ] リーダーは任意クルーの固定シフトを編集・保存できる（管理一覧から代理編集）。
-- [ ] クルーは自分の固定シフトページを**常に閲覧**でき、`fixed_shift_editable_by_crew=True` のときだけ編集できる（Falseだと閲覧のみ／編集はブロック）。
+- [ ] クルーは自分の固定シフトページを**常に閲覧**でき、`fixed_shift_editable_by_crew=True` のときだけ直接編集できる。
+- [ ] 許可が無いクルーは「変更を申請」でき（コメント任意）、再申請は保留を上書きする（1人1件）。
+- [ ] リーダーは申請一覧から承認/却下でき、**承認で固定シフトに全置換**、却下は未反映。どちらもコメントを返せ、クルー側に表示される。
+- [ ] 管理メニューに承認待ちの**保留件数**が出る。
 - [ ] 新規アカウントは既定で `fixed_shift_editable_by_crew=False`。
 - [ ] クルー管理画面の**個別トグル**で1人ずつ、**一斉ボタン**で全クルーまとめて許可/不許可を切り替えられる（確認あり）。
 - [ ] 出勤/休みの両方を曜日ごとに保存できる（休みは `is_available=False`）。

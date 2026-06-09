@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     ConfirmedShift,
+    FixedShiftChangeRequest,
     ShiftPeriod,
     ShiftRequest,
     ShiftRequestDay,
@@ -44,4 +45,11 @@ class ConfirmedShiftAdmin(admin.ModelAdmin):
 class WeeklyFixedShiftAdmin(admin.ModelAdmin):
     list_display = ("user", "get_weekday_display", "is_available", "start_time", "end_time")
     list_filter = ("weekday", "is_available")
+    search_fields = ("user__username", "user__name")
+
+
+@admin.register(FixedShiftChangeRequest)
+class FixedShiftChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ("user", "status", "created_at", "reviewer", "reviewed_at")
+    list_filter = ("status",)
     search_fields = ("user__username", "user__name")
