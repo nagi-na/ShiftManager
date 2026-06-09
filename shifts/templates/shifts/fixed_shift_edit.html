@@ -26,12 +26,17 @@
   </p>
 {% endif %}
 
-{% if pending %}
+{% if locked %}
   <div class="alert alert-info">
     <strong>変更申請を承認待ちです</strong>（申請: {{ pending.created_at|date:"Y/m/d H:i" }}）。
-    下の内容を直して再申請すると、この申請を上書きします。
+    内容を変えたいときは、いったん<strong>申請を取り消して</strong>から新しく申請してください（下の内容は申請したものです）。
     {% if pending.crew_comment %}<div class="small mt-1">あなたのコメント: {{ pending.crew_comment }}</div>{% endif %}
   </div>
+  <form method="post" action="{% url 'my_fixed_shift_cancel' %}" class="mb-3"
+        onsubmit="return confirm('この変更申請を取り消します。よろしいですか？');">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-danger btn-sm">申請を取り消す</button>
+  </form>
 {% endif %}
 
 {% if mode == 'request' and last_reviewed %}
@@ -85,13 +90,15 @@
     </div>
   </div>
 
-  {% if mode == 'request' %}
+  {% if locked %}
+    {# 承認待ち：内容は読み取り専用。変更したいときは上の「申請を取り消す」から #}
+  {% elif mode == 'request' %}
     <div class="mb-3">
       <label class="form-label">リーダーへのコメント（任意）</label>
       <textarea name="crew_comment" rows="2" class="form-control">{{ crew_comment }}</textarea>
       <div class="form-text">変更の理由や希望などを書けます。</div>
     </div>
-    <button type="submit" class="btn btn-primary">{% if pending %}この内容で再申請する{% else %}この内容で変更を申請する{% endif %}</button>
+    <button type="submit" class="btn btn-primary">この内容で変更を申請する</button>
   {% else %}
     <button type="submit" class="btn btn-primary">固定シフトを保存する</button>
   {% endif %}

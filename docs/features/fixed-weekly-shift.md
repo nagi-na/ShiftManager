@@ -66,7 +66,7 @@
 直接編集を許可されていないクルーでも、固定シフトの変更を**申請**でき、リーダーが承認すると反映される。
 
 - クルー側（自分の固定シフトページ）：7曜日の希望を入力し、**コメント（任意）**を添えて「変更を申請」。
-  - **1人1件の保留**。再申請すると保留中の申請を上書きする。
+  - **1人1件の保留**。保留中は内容が**読み取り専用**になり、変えたいときは**自分で申請を取り消して**から新しく申請する（上書き再申請はしない）。
   - 保留中の状態と、前回の処理結果（承認/却下とリーダーのコメント）を表示。
 - リーダー側（管理メニュー「固定シフト申請」）：
   - 承認待ち一覧（管理メニューに**保留件数バッジ**）。
@@ -150,7 +150,7 @@ class FixedShiftChangeRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 ```
-- 保留は `update_or_create(user, status=PENDING)` で1人1件に保つ（再申請＝上書き）。
+- 保留は1人1件。保留中は新規申請をブロックし、本人が取り消す（保留を削除）と再申請できる。
 - 承認時に `payload` の内容で `WeeklyFixedShift` を全置換する。
 
 ## 4. 実装メモ（変更ファイルの見込み）
@@ -159,7 +159,7 @@ class FixedShiftChangeRequest(models.Model):
 - `shifts/models.py` … `WeeklyFixedShift`・`FixedShiftChangeRequest` 追加。
 - フォーム … 固定シフト編集フォームセット（7曜日分。`ShiftRequestDay` 同様の出勤可否＋時刻）。
 - ビュー / ルート（実装は `shifts` 側）
-  - **クルー本人ページ**：`my_fixed_shift`（`/fixed-shift/`）。許可時は直接保存（edit）、未許可時は**変更申請**（request, コメント＋保留状態表示）。
+  - **クルー本人ページ**：`my_fixed_shift`（`/fixed-shift/`）。許可時は直接保存（edit）、未許可時は**変更申請**（request, コメント＋保留状態表示）。保留中は読み取り専用で、`my_fixed_shift_cancel`（`/fixed-shift/cancel/`）で取り消し→再申請。
   - **管理一覧／代理編集**：`manage_fixed_shifts`（`/manage/fixed-shifts/`）＋ `manage_fixed_shift_edit`（`.../<user_pk>/edit/`）。`@manager_required`。
   - **申請の承認**：`manage_fixed_shift_requests`（`/manage/fixed-shift-requests/` 一覧）＋ `manage_fixed_shift_request_review`（`.../<pk>/review/` 比較＋承認/却下）。`@manager_required`。
   - **個別/一斉トグル**：`accounts` に `manage/accounts/<pk>/toggle-fixed-edit/`（個別）と `manage/accounts/fixed-edit/bulk/`（全クルー一括、POST＋確認）。`@admin_required`。
@@ -219,7 +219,7 @@ docker compose exec web python manage.py migrate
 
 - [ ] リーダーは任意クルーの固定シフトを編集・保存できる（管理一覧から代理編集）。
 - [ ] クルーは自分の固定シフトページを**常に閲覧**でき、`fixed_shift_editable_by_crew=True` のときだけ直接編集できる。
-- [ ] 許可が無いクルーは「変更を申請」でき（コメント任意）、再申請は保留を上書きする（1人1件）。
+- [ ] 許可が無いクルーは「変更を申請」でき（コメント任意）。保留中は読み取り専用で、**取り消してから**再申請できる（1人1件）。
 - [ ] リーダーは申請一覧から承認/却下でき、**承認で固定シフトに全置換**、却下は未反映。どちらもコメントを返せ、クルー側に表示される。
 - [ ] 管理メニューに承認待ちの**保留件数**が出る。
 - [ ] 新規アカウントは既定で `fixed_shift_editable_by_crew=False`。

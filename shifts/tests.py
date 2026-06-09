@@ -433,14 +433,26 @@ class FixedShiftRequestApprovalTests(TestCase):
             {**fixed_formset_data(days), "crew_comment": comment},
         )
 
-    def test_resubmit_overwrites_pending(self):
+    def test_resubmit_blocked_until_cancel(self):
+        Status = FixedShiftChangeRequest.Status
         self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)], "一回目")
-        self._submit_request([{"start": "10:00", "end": "18:00"} for _ in range(7)], "二回目")
-        pend = FixedShiftChangeRequest.objects.filter(
-            user=self.crew, status=FixedShiftChangeRequest.Status.PENDING
+        # 保留中はロック：再申請しても新規作成されず、内容も上書きされない
+        resp = self._submit_request([{"start": "10:00", "end": "18:00"} for _ in range(7)], "二回目")
+        self.assertEqual(resp.status_code, 200)  # リダイレクトせず読み取り専用で再表示
+        pend = FixedShiftChangeRequest.objects.filter(user=self.crew, status=Status.PENDING)
+        self.assertEqual(pend.count(), 1)
+        self.assertEqual(pend.first().crew_comment, "一回目")
+
+        # 取り消すと保留が消え、改めて申請できる
+        self.client.force_login(self.crew)
+        self.client.post(reverse("my_fixed_shift_cancel"))
+        self.assertFalse(
+            FixedShiftChangeRequest.objects.filter(user=self.crew, status=Status.PENDING).exists()
         )
-        self.assertEqual(pend.count(), 1)  # 上書き＝1件のまま
-        self.assertEqual(pend.first().crew_comment, "二回目")
+        self._submit_request([{"start": "10:00", "end": "18:00"} for _ in range(7)], "三回目")
+        pend = FixedShiftChangeRequest.objects.filter(user=self.crew, status=Status.PENDING)
+        self.assertEqual(pend.count(), 1)
+        self.assertEqual(pend.first().crew_comment, "三回目")
 
     def test_leader_approve_applies_payload(self):
         days = [{"start": "09:00", "end": "17:00"} for _ in range(7)]

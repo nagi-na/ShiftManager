@@ -420,9 +420,11 @@ def my_fixed_shift(request):
         ).first()
     )
 
-    crew_comment = pending.crew_comment if pending else ""
+    # 申請モードで保留中は読み取り専用（取り消してから新規申請する）
+    locked = mode == "request" and pending is not None
+    crew_comment = pending.crew_comment if (pending and locked) else ""
 
-    if request.method == "POST":
+    if request.method == "POST" and not locked:
         formset = FixedShiftFormSet(request.POST, prefix="fx")
         crew_comment = request.POST.get("crew_comment", "").strip()
         if formset.is_valid():
@@ -431,21 +433,22 @@ def my_fixed_shift(request):
                 _apply_payload(user, payload)
                 messages.success(request, "固定シフトを保存しました。")
             else:
-                # 保留中があれば上書き、無ければ新規（1人1件）
-                FixedShiftChangeRequest.objects.update_or_create(
-                    user=user,
-                    status=FixedShiftChangeRequest.Status.PENDING,
-                    defaults={"payload": payload, "crew_comment": crew_comment},
+                FixedShiftChangeRequest.objects.create(
+                    user=user, payload=payload, crew_comment=crew_comment
                 )
                 messages.success(request, "固定シフトの変更を申請しました。承認をお待ちください。")
             return redirect("my_fixed_shift")
     else:
-        # 申請モードで保留があれば、その内容を編集の起点にする
-        if mode == "request" and pending:
-            initial = _payload_to_initial(pending.payload)
+        if locked:
+            initial = _payload_to_initial(pending.payload)  # 申請内容を読み取り専用表示
         else:
             initial = _fixed_shift_initial(user)
         formset = FixedShiftFormSet(initial=initial, prefix="fx")
+
+    if locked:
+        for form in formset.forms:
+            for field in form.fields.values():
+                field.widget.attrs["disabled"] = True
 
     return render(
         request,
@@ -455,6 +458,7 @@ def my_fixed_shift(request):
             "rows": _fixed_shift_rows(formset),
             "mode": mode,
             "editable": editable,
+            "locked": locked,
             "target": user,
             "self_view": True,
             "has_fixed_shift": user.fixed_shifts.exists(),
@@ -463,6 +467,18 @@ def my_fixed_shift(request):
             "last_reviewed": last_reviewed,
         },
     )
+
+
+@login_required
+def my_fixed_shift_cancel(request):
+    """クルー本人が、自分の保留中の固定シフト変更申請を取り消す。"""
+    if request.method == "POST":
+        deleted, _ = request.user.fixed_shift_requests.filter(
+            status=FixedShiftChangeRequest.Status.PENDING
+        ).delete()
+        if deleted:
+            messages.success(request, "固定シフトの変更申請を取り消しました。新しく申請できます。")
+    return redirect("my_fixed_shift")
 
 
 @manager_required
@@ -514,6 +530,7 @@ def manage_fixed_shift_edit(request, user_pk):
             "rows": _fixed_shift_rows(formset),
             "mode": "edit",
             "editable": True,
+            "locked": False,
             "target": target,
             "self_view": False,
             "has_fixed_shift": target.fixed_shifts.exists(),
