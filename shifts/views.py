@@ -13,13 +13,20 @@ from django.utils import timezone
 from accounts.decorators import manager_required
 from accounts.models import User
 
-from .forms import ConfirmedShiftForm, NoteForm, PeriodForm, ShiftDayFormSet
+from .forms import (
+    ConfirmedShiftForm,
+    FixedShiftFormSet,
+    NoteForm,
+    PeriodForm,
+    ShiftDayFormSet,
+)
 from .models import (
     ConfirmedShift,
     ShiftPeriod,
     ShiftRequest,
     ShiftRequestDay,
     ShiftRequestHistory,
+    WeeklyFixedShift,
 )
 
 WEEKDAYS_JP = ["月", "火", "水", "木", "金", "土", "日"]
@@ -116,9 +123,26 @@ def shift_submit(request, pk):
         note_form.fields["note"].widget.attrs["disabled"] = True
 
     rows = [
-        {"form": form, "date": dt, "weekday": WEEKDAYS_JP[dt.weekday()]}
+        {
+            "form": form,
+            "date": dt,
+            "weekday": WEEKDAYS_JP[dt.weekday()],
+            "weekday_idx": dt.weekday(),
+        }
         for form, dt in zip(formset.forms, dates)
     ]
+
+    # 「固定シフトを反映」ボタン用：このユーザーの曜日別固定シフトを曜日→内容で渡す
+    fixed_map = {ws.weekday: ws for ws in request.user.fixed_shifts.all()}
+    fixed_shift_json = {
+        str(wd): (
+            {"off": True}
+            if not ws.is_available
+            else {"off": False, "start": ws.start_time, "end": ws.end_time}
+        )
+        for wd, ws in fixed_map.items()
+    }
+
     context = {
         "period": period,
         "formset": formset,
@@ -130,6 +154,8 @@ def shift_submit(request, pk):
         "submitted": submitted,
         "request_obj": req,
         "notice": _submit_notice(period, now, submitted, read_only),
+        "fixed_shift_json": fixed_shift_json,
+        "has_fixed_shift": bool(fixed_map),
     }
     return render(request, "shifts/submit.html", context)
 
@@ -261,6 +287,142 @@ def request_history(request, pk):
         request,
         "shifts/history.html",
         {"req": req, "histories": histories},
+    )
+
+
+# ----- 固定シフト（曜日別デフォルト） -----
+
+def _fixed_shift_initial(user):
+    """ユーザーの固定シフトを、月〜日(0〜6)の順でフォーム初期値にする。"""
+    existing = {ws.weekday: ws for ws in user.fixed_shifts.all()}
+    initial = []
+    for wd in range(7):
+        ws = existing.get(wd)
+        initial.append(
+            {
+                "weekday": wd,
+                "is_day_off": (not ws.is_available) if ws else False,
+                "start_time": ws.start_time if ws else None,
+                "end_time": ws.end_time if ws else None,
+            }
+        )
+    return initial
+
+
+def _save_fixed_shift(user, formset):
+    """固定シフトを保存（全削除→作り直し）。"""
+    with transaction.atomic():
+        user.fixed_shifts.all().delete()
+        objs = []
+        for form in formset:
+            cd = form.cleaned_data
+            avail = not cd.get("is_day_off", False)
+            objs.append(
+                WeeklyFixedShift(
+                    user=user,
+                    weekday=cd["weekday"],
+                    is_available=avail,
+                    start_time=cd.get("start_time") if avail else None,
+                    end_time=cd.get("end_time") if avail else None,
+                )
+            )
+        WeeklyFixedShift.objects.bulk_create(objs)
+
+
+def _fixed_shift_rows(formset):
+    """テンプレート表示用に (曜日名, form) を並べる。"""
+    return [
+        {"form": form, "weekday": WEEKDAYS_JP[i]}
+        for i, form in enumerate(formset.forms)
+    ]
+
+
+@login_required
+def my_fixed_shift(request):
+    """クルー本人の固定シフトページ。閲覧は常時、編集は許可されているときのみ。"""
+    user = request.user
+    editable = user.can_edit_fixed_shift_of(user)
+
+    if request.method == "POST" and editable:
+        formset = FixedShiftFormSet(request.POST, prefix="fx")
+        if formset.is_valid():
+            _save_fixed_shift(user, formset)
+            messages.success(request, "固定シフトを保存しました。")
+            return redirect("my_fixed_shift")
+    else:
+        formset = FixedShiftFormSet(initial=_fixed_shift_initial(user), prefix="fx")
+
+    if not editable:
+        for form in formset.forms:
+            for field in form.fields.values():
+                field.widget.attrs["disabled"] = True
+
+    return render(
+        request,
+        "shifts/fixed_shift_edit.html",
+        {
+            "formset": formset,
+            "rows": _fixed_shift_rows(formset),
+            "editable": editable,
+            "target": user,
+            "self_view": True,
+            "has_fixed_shift": user.fixed_shifts.exists(),
+        },
+    )
+
+
+@manager_required
+def manage_fixed_shifts(request):
+    """全クルーの固定シフト一覧（リーダー・管理者）。"""
+    crew = User.objects.filter(role=User.Role.CREW, is_active=True).order_by(
+        "name", "username"
+    )
+    by_user = {}
+    for ws in WeeklyFixedShift.objects.filter(user__in=crew):
+        by_user.setdefault(ws.user_id, {})[ws.weekday] = ws
+
+    table = []
+    for u in crew:
+        wsmap = by_user.get(u.id, {})
+        table.append(
+            {
+                "user": u,
+                "cells": [wsmap.get(wd) for wd in range(7)],
+                "has_any": bool(wsmap),
+            }
+        )
+    return render(
+        request,
+        "shifts/manage_fixed_shifts.html",
+        {"table": table, "weekdays": WEEKDAYS_JP},
+    )
+
+
+@manager_required
+def manage_fixed_shift_edit(request, user_pk):
+    """リーダー・管理者が、対象クルーの固定シフトを代理編集する。"""
+    target = get_object_or_404(User, pk=user_pk)
+
+    if request.method == "POST":
+        formset = FixedShiftFormSet(request.POST, prefix="fx")
+        if formset.is_valid():
+            _save_fixed_shift(target, formset)
+            messages.success(request, f"「{target.name}」の固定シフトを保存しました。")
+            return redirect("manage_fixed_shifts")
+    else:
+        formset = FixedShiftFormSet(initial=_fixed_shift_initial(target), prefix="fx")
+
+    return render(
+        request,
+        "shifts/fixed_shift_edit.html",
+        {
+            "formset": formset,
+            "rows": _fixed_shift_rows(formset),
+            "editable": True,
+            "target": target,
+            "self_view": False,
+            "has_fixed_shift": target.fixed_shifts.exists(),
+        },
     )
 
 

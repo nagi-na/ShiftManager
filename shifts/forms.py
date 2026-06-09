@@ -68,6 +68,46 @@ class ShiftDayForm(forms.Form):
 ShiftDayFormSet = forms.formset_factory(ShiftDayForm, extra=0)
 
 
+class FixedShiftDayForm(forms.Form):
+    """曜日ごとの固定シフト（1曜日1枠）。ShiftDayForm の曜日版。"""
+
+    weekday = forms.IntegerField(widget=forms.HiddenInput)
+    is_day_off = forms.BooleanField(
+        required=False,
+        label="休み",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input dayoff-toggle"}),
+    )
+    start_time = forms.ChoiceField(
+        required=False,
+        label="開始",
+        choices=TIME_FIELD_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select form-select-sm time-input"}),
+    )
+    end_time = forms.ChoiceField(
+        required=False,
+        label="終了",
+        choices=TIME_FIELD_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select form-select-sm time-input"}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        # 「休み」でない曜日＝出勤する曜日なので、時刻が必須。
+        if not cleaned.get("is_day_off"):
+            start = cleaned.get("start_time")
+            end = cleaned.get("end_time")
+            if not start or not end:
+                raise ValidationError(
+                    "出勤する曜日は開始・終了時刻を選択してください（休みの曜日は「休み」にチェック）。"
+                )
+            if start >= end:
+                raise ValidationError("開始時刻は終了時刻より前にしてください。")
+        return cleaned
+
+
+FixedShiftFormSet = forms.formset_factory(FixedShiftDayForm, extra=0)
+
+
 class PeriodForm(forms.ModelForm):
     """対象期間の作成・編集（S7）。"""
 

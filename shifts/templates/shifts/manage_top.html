@@ -32,6 +32,16 @@
       </div>
     </div>
   </div>
+
+  <div class="col-12 col-md-6">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6">固定シフト管理</h2>
+        <p class="text-muted small mb-2">クルーの曜日別固定シフトの一覧・代理編集</p>
+        <a class="btn btn-primary btn-sm" href="{% url 'manage_fixed_shifts' %}">固定シフト管理へ</a>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% if user.is_superuser %}

@@ -6,6 +6,7 @@ from .models import (
     ShiftRequest,
     ShiftRequestDay,
     ShiftRequestHistory,
+    WeeklyFixedShift,
 )
 
 
@@ -37,3 +38,10 @@ class ShiftRequestHistoryAdmin(admin.ModelAdmin):
 @admin.register(ConfirmedShift)
 class ConfirmedShiftAdmin(admin.ModelAdmin):
     list_display = ("period", "original_name", "uploaded_by", "uploaded_at")
+
+
+@admin.register(WeeklyFixedShift)
+class WeeklyFixedShiftAdmin(admin.ModelAdmin):
+    list_display = ("user", "get_weekday_display", "is_available", "start_time", "end_time")
+    list_filter = ("weekday", "is_available")
+    search_fields = ("user__username", "user__name")

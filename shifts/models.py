@@ -178,6 +178,60 @@ class ShiftRequestHistory(models.Model):
         return f"{self.request} v{self.version_no}"
 
 
+class WeeklyFixedShift(models.Model):
+    """クルーの曜日別固定シフト。(user, weekday) で1件。
+
+    希望提出フォームの「固定シフトを反映」で、各日付の曜日に対応する内容をコピーする元になる。
+    """
+
+    class Weekday(models.IntegerChoices):
+        MON = 0, "月"
+        TUE = 1, "火"
+        WED = 2, "水"
+        THU = 3, "木"
+        FRI = 4, "金"
+        SAT = 5, "土"
+        SUN = 6, "日"  # Python の date.weekday()（月=0〜日=6）に合わせる
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="クルー",
+        on_delete=models.CASCADE,
+        related_name="fixed_shifts",
+    )
+    weekday = models.IntegerField("曜日", choices=Weekday.choices)
+    is_available = models.BooleanField("出勤可", default=True)
+    start_time = models.CharField(
+        "開始時刻", max_length=5, null=True, blank=True, choices=TIME_CHOICES
+    )
+    end_time = models.CharField(
+        "終了時刻", max_length=5, null=True, blank=True, choices=TIME_CHOICES
+    )
+
+    class Meta:
+        verbose_name = "固定シフト"
+        verbose_name_plural = "固定シフト"
+        ordering = ["user", "weekday"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "weekday"], name="unique_fixed_shift_per_weekday"
+            )
+        ]
+
+    def __str__(self):
+        label = self.get_weekday_display()
+        if not self.is_available:
+            return f"{self.user} {label}: 休み"
+        return f"{self.user} {label}: {self.start_time}〜{self.end_time}"
+
+    def clean(self):
+        if self.is_available:
+            if not self.start_time or not self.end_time:
+                raise ValidationError("出勤可の曜日は開始・終了時刻が必須です。")
+            if self.start_time >= self.end_time:
+                raise ValidationError("開始時刻は終了時刻より前にしてください。")
+
+
 def confirmed_shift_upload_path(instance, filename):
     return f"confirmed_shifts/period_{instance.period_id}/{filename}"
 

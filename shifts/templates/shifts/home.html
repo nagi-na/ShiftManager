@@ -7,6 +7,8 @@
   <h1 class="h4 mb-0">{% if is_manager %}対象期間（管理）{% else %}シフト提出{% endif %}</h1>
   {% if is_manager %}
     <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">管理メニュー</a>
+  {% else %}
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'my_fixed_shift' %}">固定シフトを確認</a>
   {% endif %}
 </div>
 

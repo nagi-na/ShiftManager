@@ -15,7 +15,13 @@ from django.utils import timezone
 
 from accounts.models import User
 
-from .models import ConfirmedShift, ShiftPeriod, ShiftRequest, ShiftRequestDay
+from .models import (
+    ConfirmedShift,
+    ShiftPeriod,
+    ShiftRequest,
+    ShiftRequestDay,
+    WeeklyFixedShift,
+)
 from .views import _is_closed, _manually_closed, _submission_permission
 
 Policy = ShiftPeriod.PostDeadlinePolicy
@@ -261,3 +267,140 @@ class ConfirmedFileAccessTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp["X-Accel-Redirect"].startswith("/protected/"))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+def fixed_formset_data(days):
+    """my_fixed_shift / manage_fixed_shift_edit へ送る固定シフトのPOSTデータ。
+
+    days: 月〜日(0..6)の順で7件 [{"day_off":bool,"start":"HH:MM","end":"HH:MM"}, ...]
+    """
+    data = {
+        "fx-TOTAL_FORMS": "7",
+        "fx-INITIAL_FORMS": "0",
+        "fx-MIN_NUM_FORMS": "0",
+        "fx-MAX_NUM_FORMS": "1000",
+    }
+    for i, d in enumerate(days):
+        data[f"fx-{i}-weekday"] = str(i)
+        if d.get("day_off"):
+            data[f"fx-{i}-is_day_off"] = "on"
+        if d.get("start"):
+            data[f"fx-{i}-start_time"] = d["start"]
+        if d.get("end"):
+            data[f"fx-{i}-end_time"] = d["end"]
+    return data
+
+
+class FixedShiftTests(TestCase):
+    """固定シフト：編集権限・代理編集・許可トグル・提出画面への受け渡し。"""
+
+    def setUp(self):
+        self.admin = User.objects.create_user("admin", password="x")
+        self.admin.role = User.Role.ADMIN
+        self.admin.save(update_fields=["role"])
+        self.leader = User.objects.create_user("leader", password="x")
+        self.leader.role = User.Role.LEADER
+        self.leader.save(update_fields=["role"])
+        self.crew = User.objects.create_user("crew", password="x")  # 既定 role=crew
+
+    # --- 権限ヘルパー ---
+
+    def test_permission_helper(self):
+        other = User.objects.create_user("crew2", password="x")
+        # リーダー/管理者は誰のでも編集可
+        self.assertTrue(self.leader.can_edit_fixed_shift_of(self.crew))
+        self.assertTrue(self.admin.can_edit_fixed_shift_of(self.crew))
+        # クルーは許可が無いと自分のも不可
+        self.assertFalse(self.crew.can_edit_fixed_shift_of(self.crew))
+        # 許可されれば自分のは可、他人のは不可
+        self.crew.fixed_shift_editable_by_crew = True
+        self.assertTrue(self.crew.can_edit_fixed_shift_of(self.crew))
+        self.assertFalse(self.crew.can_edit_fixed_shift_of(other))
+
+    def test_new_account_default_not_editable(self):
+        self.assertFalse(User.objects.create_user("new", password="x").fixed_shift_editable_by_crew)
+
+    # --- 本人編集（許可フラグで制御） ---
+
+    def test_crew_without_permission_cannot_save(self):
+        self.client.force_login(self.crew)
+        days = [{"start": "09:00", "end": "17:00"} for _ in range(7)]
+        resp = self.client.post(reverse("my_fixed_shift"), fixed_formset_data(days))
+        self.assertEqual(resp.status_code, 200)  # 保存せず再表示
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 0)
+
+    def test_crew_with_permission_saves(self):
+        self.crew.fixed_shift_editable_by_crew = True
+        self.crew.save(update_fields=["fixed_shift_editable_by_crew"])
+        self.client.force_login(self.crew)
+        days = [{"start": "09:00", "end": "17:00"} for _ in range(7)]
+        days[6] = {"day_off": True}  # 日曜は休み
+        resp = self.client.post(reverse("my_fixed_shift"), fixed_formset_data(days))
+        self.assertRedirects(resp, reverse("my_fixed_shift"))
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 7)
+        sun = WeeklyFixedShift.objects.get(user=self.crew, weekday=6)
+        self.assertFalse(sun.is_available)
+        self.assertIsNone(sun.start_time)
+        mon = WeeklyFixedShift.objects.get(user=self.crew, weekday=0)
+        self.assertEqual((mon.start_time, mon.end_time), ("09:00", "17:00"))
+
+    # --- リーダーの代理編集 ---
+
+    def test_leader_can_edit_crew(self):
+        self.client.force_login(self.leader)
+        days = [{"start": "10:00", "end": "18:00"} for _ in range(7)]
+        resp = self.client.post(
+            reverse("manage_fixed_shift_edit", args=[self.crew.pk]),
+            fixed_formset_data(days),
+        )
+        self.assertRedirects(resp, reverse("manage_fixed_shifts"))
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 7)
+
+    def test_crew_cannot_access_manage_list(self):
+        self.client.force_login(self.crew)
+        resp = self.client.get(reverse("manage_fixed_shifts"))
+        self.assertRedirects(resp, reverse("home"))
+
+    # --- 許可トグル（個別・一斉） ---
+
+    def test_individual_toggle(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse("manage_account_toggle_fixed_edit", args=[self.crew.pk]))
+        self.crew.refresh_from_db()
+        self.assertTrue(self.crew.fixed_shift_editable_by_crew)
+
+    def test_bulk_toggle_enables_only_crew(self):
+        crew2 = User.objects.create_user("crew2", password="x")
+        self.client.force_login(self.admin)
+        self.client.post(reverse("manage_account_bulk_fixed_edit"), {"enable": "1"})
+        self.crew.refresh_from_db()
+        crew2.refresh_from_db()
+        self.leader.refresh_from_db()
+        self.assertTrue(self.crew.fixed_shift_editable_by_crew)
+        self.assertTrue(crew2.fixed_shift_editable_by_crew)
+        self.assertFalse(self.leader.fixed_shift_editable_by_crew)  # クルー以外は対象外
+
+    def test_bulk_toggle_requires_admin(self):
+        self.client.force_login(self.leader)  # リーダーはアカウント管理権限なし
+        resp = self.client.post(reverse("manage_account_bulk_fixed_edit"), {"enable": "1"})
+        self.assertRedirects(resp, reverse("home"))
+        self.crew.refresh_from_db()
+        self.assertFalse(self.crew.fixed_shift_editable_by_crew)
+
+    # --- 提出画面への受け渡し ---
+
+    def test_submit_page_exposes_fixed_shift(self):
+        today = timezone.localdate()
+        period = make_period(
+            self.leader, timezone.now() + timedelta(days=3), start=today, end=today
+        )
+        WeeklyFixedShift.objects.create(
+            user=self.crew, weekday=today.weekday(),
+            is_available=True, start_time="09:00", end_time="17:00",
+        )
+        self.client.force_login(self.crew)
+        resp = self.client.get(reverse("shift_submit", args=[period.pk]))
+        self.assertTrue(resp.context["has_fixed_shift"])
+        self.assertIn(str(today.weekday()), resp.context["fixed_shift_json"])
+        self.assertContains(resp, 'id="apply-fixed"')
+        self.assertContains(resp, 'fixed-shift-data')

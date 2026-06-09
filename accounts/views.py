@@ -97,6 +97,35 @@ def account_toggle_active(request, pk):
 
 
 @admin_required
+def account_toggle_fixed_edit(request, pk):
+    """このクルー本人による固定シフト編集の許可/不許可を切り替える。"""
+    target = get_object_or_404(User, pk=pk)
+    if request.method == "POST":
+        target.fixed_shift_editable_by_crew = not target.fixed_shift_editable_by_crew
+        target.save(update_fields=["fixed_shift_editable_by_crew"])
+        state = "許可" if target.fixed_shift_editable_by_crew else "不許可"
+        messages.success(
+            request, f"「{target.name}」の固定シフト本人編集を{state}にしました。"
+        )
+    return redirect("manage_accounts")
+
+
+@admin_required
+def account_bulk_fixed_edit(request):
+    """全クルーの固定シフト本人編集を一括で許可/不許可にする。"""
+    if request.method == "POST":
+        enable = request.POST.get("enable") == "1"
+        n = User.objects.filter(role=User.Role.CREW).update(
+            fixed_shift_editable_by_crew=enable
+        )
+        state = "許可" if enable else "不許可"
+        messages.success(
+            request, f"全クルー {n} 名の固定シフト本人編集を{state}にしました。"
+        )
+    return redirect("manage_accounts")
+
+
+@admin_required
 def account_delete(request, pk):
     """アカウントの削除。自分自身・データ作成者は削除不可。"""
     target = get_object_or_404(User, pk=pk)

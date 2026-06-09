@@ -19,6 +19,11 @@ class User(AbstractUser):
     role = models.CharField(
         "ロール", max_length=16, choices=Role.choices, default=Role.CREW
     )
+    fixed_shift_editable_by_crew = models.BooleanField(
+        "本人による固定シフト編集を許可",
+        default=False,
+        help_text="オンにすると、このクルー本人が自分の固定シフトを編集できます。",
+    )
 
     class Meta:
         verbose_name = "ユーザー"
@@ -45,3 +50,12 @@ class User(AbstractUser):
     def can_manage_accounts(self) -> bool:
         """アカウント管理ができるか（システム管理者のみ）。"""
         return self.role == self.Role.ADMIN
+
+    def can_edit_fixed_shift_of(self, target) -> bool:
+        """自分(self)が target の固定シフトを編集してよいか。
+
+        リーダー/管理者は誰のでも編集可。クルーは自分のだけ、かつ許可フラグが立つときのみ。
+        """
+        if self.can_manage:
+            return True
+        return self.pk == target.pk and target.fixed_shift_editable_by_crew

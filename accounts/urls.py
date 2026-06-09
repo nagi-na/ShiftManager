@@ -34,6 +34,16 @@ urlpatterns = [
         name="manage_account_toggle",
     ),
     path(
+        "manage/accounts/<int:pk>/toggle-fixed-edit/",
+        views.account_toggle_fixed_edit,
+        name="manage_account_toggle_fixed_edit",
+    ),
+    path(
+        "manage/accounts/fixed-edit/bulk/",
+        views.account_bulk_fixed_edit,
+        name="manage_account_bulk_fixed_edit",
+    ),
+    path(
         "manage/accounts/<int:pk>/delete/",
         views.account_delete,
         name="manage_account_delete",

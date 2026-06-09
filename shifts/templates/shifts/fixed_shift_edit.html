@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}固定シフト{% if not self_view %}（{{ target.name }}）{% endif %} | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">
+    固定シフト{% if not self_view %}：{{ target.name }}<span class="text-muted small">（{{ target.username }}）</span>{% endif %}
+  </h1>
+  {% if self_view %}
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+  {% else %}
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_fixed_shifts' %}">← 固定シフト管理</a>
+  {% endif %}
+</div>
+
+<p class="text-muted small mb-3">
+  曜日ごとの定番シフトです。希望提出のとき、提出画面の「固定シフトを反映」ボタンでまとめて入力できます。<br>
+  出勤する曜日は開始・終了時刻を選び、<strong>働かない曜日は「休み」にチェック</strong>します。
+</p>
+
+{% if self_view and not editable %}
+  <div class="alert alert-secondary">
+    現在、ご自身での編集は許可されていません（<strong>閲覧のみ</strong>）。変更が必要な場合はリーダーに依頼してください。
+  </div>
+{% endif %}
+
+{% if not editable and not has_fixed_shift %}
+  <div class="alert alert-warning">
+    固定シフトはまだ登録されていません。リーダーに設定を依頼してください。
+  </div>
+{% else %}
+<form method="post" novalidate>
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  {% if formset.non_form_errors %}
+    <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+  {% endif %}
+
+  <div class="card shadow-sm mb-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>曜日</th>
+            <th class="text-center">休み</th>
+            <th>開始</th>
+            <th>終了</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% with form=row.form %}
+          <tr class="{% if form.non_field_errors %}table-danger{% endif %}">
+            <td class="text-nowrap">
+              {{ form.weekday }}
+              {{ row.weekday }}
+            </td>
+            <td class="text-center">{{ form.is_day_off }}</td>
+            <td>{{ form.start_time }}</td>
+            <td>{{ form.end_time }}</td>
+          </tr>
+          {% if form.non_field_errors %}
+          <tr class="table-danger">
+            <td colspan="4" class="text-danger small">{{ form.non_field_errors|join:" / " }}</td>
+          </tr>
+          {% endif %}
+          {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if editable %}
+    <button type="submit" class="btn btn-primary">固定シフトを保存する</button>
+  {% endif %}
+</form>
+{% endif %}
+
+<script>
+  // submit.html と同じ：「休み」チェックで時刻入力の有効/無効を切り替える
+  function syncRow(checkbox) {
+    var tr = checkbox.closest('tr');
+    var times = tr.querySelectorAll('.time-input');
+    times.forEach(function (t) {
+      t.disabled = checkbox.checked;
+      if (checkbox.checked) { t.value = ''; }
+    });
+  }
+  document.querySelectorAll('.dayoff-toggle').forEach(function (cb) {
+    if (!cb.disabled) {
+      syncRow(cb);
+      cb.addEventListener('change', function () { syncRow(cb); });
+    }
+  });
+</script>
+{% endblock %}

@@ -33,6 +33,21 @@
     出勤する日は開始・終了時刻を選んでください。<strong>出勤できない日だけ「休み」にチェック</strong>します。
   </p>
 
+  {% if not read_only %}
+    {% if has_fixed_shift %}
+      <div class="mb-2">
+        <button type="button" class="btn btn-outline-primary btn-sm" id="apply-fixed">
+          固定シフトを反映
+        </button>
+        <span class="form-text ms-1">曜日ごとの固定シフトで全日を埋めます（違う日だけ直してください）。</span>
+      </div>
+    {% else %}
+      <div class="form-text mb-2">
+        固定シフトが未登録のため「固定シフトを反映」は使えません（<a href="{% url 'my_fixed_shift' %}">固定シフトを確認</a>）。
+      </div>
+    {% endif %}
+  {% endif %}
+
   <div class="card shadow-sm mb-3">
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
@@ -47,7 +62,7 @@
         <tbody>
           {% for row in rows %}
           {% with form=row.form %}
-          <tr class="{% if form.non_field_errors %}table-danger{% endif %}">
+          <tr class="{% if form.non_field_errors %}table-danger{% endif %}" data-weekday="{{ row.weekday_idx }}">
             <td class="text-nowrap">
               {{ form.work_date }}
               {{ row.date|date:"n/j" }}（{{ row.weekday }}）
@@ -82,6 +97,10 @@
   {% endif %}
 </form>
 
+{% if not read_only and has_fixed_shift %}
+  {{ fixed_shift_json|json_script:"fixed-shift-data" }}
+{% endif %}
+
 <script>
   // 「休み」チェックに応じて時刻入力の有効/無効を切り替える
   // チェックあり(=休み) → 時刻を無効化・クリア。チェックなし(=出勤) → 時刻を有効化。
@@ -99,5 +118,30 @@
       cb.addEventListener('change', function () { syncRow(cb); });
     }
   });
+
+  // 「固定シフトを反映」：各日の曜日に対応する固定シフトで全日を上書きする
+  var applyBtn = document.getElementById('apply-fixed');
+  var fixedEl = document.getElementById('fixed-shift-data');
+  if (applyBtn && fixedEl) {
+    var fixed = JSON.parse(fixedEl.textContent);
+    applyBtn.addEventListener('click', function () {
+      if (!confirm('現在の入力内容を固定シフトで上書きします。よろしいですか？')) { return; }
+      document.querySelectorAll('tr[data-weekday]').forEach(function (tr) {
+        var f = fixed[tr.getAttribute('data-weekday')];
+        if (!f) { return; }  // その曜日の固定シフトが無ければ触らない
+        var cb = tr.querySelector('.dayoff-toggle');
+        if (!cb || cb.disabled) { return; }
+        var times = tr.querySelectorAll('.time-input');
+        if (f.off) {
+          cb.checked = true;
+        } else {
+          cb.checked = false;
+          if (times[0]) { times[0].value = f.start || ''; }
+          if (times[1]) { times[1].value = f.end || ''; }
+        }
+        syncRow(cb);  // 休みなら時刻を無効化・クリア、出勤なら時刻欄を有効化
+      });
+    });
+  }
 </script>
 {% endblock %}
