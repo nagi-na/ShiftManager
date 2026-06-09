@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}お知らせ管理 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">お知らせ管理</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_announcement_settings' %}">自動投稿の設定</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">← 管理メニュー</a>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h2 class="h6 mb-3">お知らせを投稿</h2>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="mb-2">
+        <label class="form-label small mb-0">タイトル</label>
+        {{ form.title }}
+        {% if form.title.errors %}<div class="text-danger small">{{ form.title.errors|join:" / " }}</div>{% endif %}
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">本文（任意）</label>
+        {{ form.body }}
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">添付（画像・PDF、複数可・各10MBまで）</label>
+        <input type="file" name="files" multiple accept="image/*,application/pdf" class="form-control">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">投稿する</button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>日時</th>
+          <th>種別</th>
+          <th>タイトル</th>
+          <th>添付</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in items %}
+        <tr>
+          <td class="small text-nowrap">{{ a.created_at|date:"Y/m/d H:i" }}</td>
+          <td><span class="badge bg-light text-dark border">{{ a.get_category_display }}</span></td>
+          <td>{{ a.title }}</td>
+          <td class="small">{{ a.attachments.count }}</td>
+          <td class="text-nowrap">
+            <form method="post" action="{% url 'manage_announcement_delete' a.pk %}" class="d-inline"
+                  onsubmit="return confirm('このお知らせを削除します。よろしいですか？');">
+              {% csrf_token %}
+              <button class="btn btn-outline-danger btn-sm" type="submit">削除</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">お知らせはまだありません。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

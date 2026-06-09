@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}お知らせ | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">お知らせ</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'home' %}">← ホーム</a>
+</div>
+
+{% if not items %}
+  <div class="alert alert-secondary">お知らせはまだありません。</div>
+{% endif %}
+
+{% for a in items %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <h2 class="h6 mb-1">{{ a.title }}</h2>
+      <span class="badge bg-light text-dark border">{{ a.get_category_display }}</span>
+    </div>
+    <p class="text-muted small mb-2">{{ a.created_at|date:"Y/m/d H:i" }}{% if a.created_by %} ・ {{ a.created_by.name }}{% endif %}</p>
+    {% if a.body %}<p style="white-space: pre-wrap;">{{ a.body }}</p>{% endif %}
+
+    {% for att in a.attachments.all %}
+      {% if att.is_image %}
+        <a href="{% url 'announcement_attachment' att.pk %}" target="_blank">
+          <img src="{% url 'announcement_attachment' att.pk %}" alt="{{ att.original_name }}"
+               class="img-fluid rounded border mb-2" style="max-height: 320px;">
+        </a>
+      {% else %}
+        <div class="mb-1">
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'announcement_attachment' att.pk %}" target="_blank">
+            📎 {{ att.original_name|default:"添付ファイル" }}
+          </a>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

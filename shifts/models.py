@@ -309,3 +309,116 @@ class ConfirmedShift(models.Model):
 
     def __str__(self):
         return f"{self.period} 確定シフト"
+
+
+class AnnouncementSettings(models.Model):
+    """自動投稿のオンオフ（シングルトン：常に1行）。"""
+
+    auto_on_confirmed = models.BooleanField("確定シフト公開時に自動投稿", default=True)
+    auto_on_period = models.BooleanField("対象期間の追加時に自動投稿", default=True)
+
+    class Meta:
+        verbose_name = "お知らせ自動投稿設定"
+        verbose_name_plural = "お知らせ自動投稿設定"
+
+    def __str__(self):
+        return "お知らせ自動投稿設定"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # 常に1行に固定
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class Announcement(models.Model):
+    """クルーへのお知らせ。手動投稿と自動投稿（確定シフト/期間追加）。"""
+
+    class Category(models.TextChoices):
+        MANUAL = "manual", "お知らせ"
+        CONFIRMED = "confirmed", "確定シフト"
+        PERIOD = "period", "期間追加"
+
+    title = models.CharField("タイトル", max_length=100)
+    body = models.TextField("本文", blank=True)
+    category = models.CharField(
+        "種別", max_length=16, choices=Category.choices, default=Category.MANUAL
+    )
+    related_period = models.ForeignKey(
+        ShiftPeriod,
+        verbose_name="関連する対象期間",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="投稿者",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
+    created_at = models.DateTimeField("投稿日時", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "お知らせ"
+        verbose_name_plural = "お知らせ"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+def announcement_upload_path(instance, filename):
+    return f"announcements/{instance.announcement_id}/{filename}"
+
+
+class AnnouncementAttachment(models.Model):
+    """お知らせの添付ファイル（画像・PDF等）。"""
+
+    announcement = models.ForeignKey(
+        Announcement,
+        verbose_name="お知らせ",
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField("ファイル", upload_to=announcement_upload_path)
+    original_name = models.CharField("元ファイル名", max_length=255, blank=True)
+
+    def __str__(self):
+        return self.original_name or self.file.name
+
+    @property
+    def is_image(self):
+        name = (self.original_name or self.file.name).lower()
+        return name.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+
+
+class AnnouncementRead(models.Model):
+    """お知らせの既読記録（ユーザー×お知らせで1件）。"""
+
+    announcement = models.ForeignKey(
+        Announcement,
+        verbose_name="お知らせ",
+        on_delete=models.CASCADE,
+        related_name="reads",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="閲覧者",
+        on_delete=models.CASCADE,
+        related_name="announcement_reads",
+    )
+    read_at = models.DateTimeField("既読日時", auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["announcement", "user"], name="unique_announcement_read"
+            )
+        ]

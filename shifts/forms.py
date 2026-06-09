@@ -1,7 +1,13 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import TIME_CHOICES, ConfirmedShift, ShiftPeriod
+from .models import (
+    TIME_CHOICES,
+    Announcement,
+    AnnouncementSettings,
+    ConfirmedShift,
+    ShiftPeriod,
+)
 
 # 空（未選択）を先頭に加えた時刻の選択肢
 TIME_FIELD_CHOICES = [("", "----")] + TIME_CHOICES
@@ -162,3 +168,27 @@ class NoteForm(forms.Form):
         label="備考・連絡事項",
         widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
     )
+
+
+class AnnouncementForm(forms.ModelForm):
+    """お知らせの手動投稿（タイトル・本文。添付はビューで request.FILES から処理）。"""
+
+    class Meta:
+        model = Announcement
+        fields = ["title", "body"]
+        widgets = {
+            "title": forms.TextInput(attrs={"class": "form-control"}),
+            "body": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+        }
+
+
+class AnnouncementSettingsForm(forms.ModelForm):
+    """自動投稿のオンオフ設定。"""
+
+    class Meta:
+        model = AnnouncementSettings
+        fields = ["auto_on_confirmed", "auto_on_period"]
+        widgets = {
+            "auto_on_confirmed": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "auto_on_period": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }

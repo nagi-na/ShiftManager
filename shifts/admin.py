@@ -1,6 +1,9 @@
 from django.contrib import admin
 
 from .models import (
+    Announcement,
+    AnnouncementAttachment,
+    AnnouncementSettings,
     ConfirmedShift,
     FixedShiftChangeRequest,
     ShiftPeriod,
@@ -53,3 +56,20 @@ class FixedShiftChangeRequestAdmin(admin.ModelAdmin):
     list_display = ("user", "status", "created_at", "reviewer", "reviewed_at")
     list_filter = ("status",)
     search_fields = ("user__username", "user__name")
+
+
+class AnnouncementAttachmentInline(admin.TabularInline):
+    model = AnnouncementAttachment
+    extra = 0
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ("title", "category", "created_by", "created_at")
+    list_filter = ("category",)
+    inlines = [AnnouncementAttachmentInline]
+
+
+@admin.register(AnnouncementSettings)
+class AnnouncementSettingsAdmin(admin.ModelAdmin):
+    list_display = ("auto_on_confirmed", "auto_on_period")

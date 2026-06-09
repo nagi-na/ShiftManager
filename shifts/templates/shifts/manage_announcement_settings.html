@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}自動投稿の設定 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">お知らせ：自動投稿の設定</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_announcements' %}">← お知らせ管理</a>
+</div>
+
+<p class="text-muted small mb-3">オンにすると、それぞれのタイミングでお知らせを自動投稿します。</p>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-check mb-2">
+        {{ form.auto_on_confirmed }}
+        <label class="form-check-label" for="{{ form.auto_on_confirmed.id_for_label }}">
+          確定シフトが公開されたとき
+        </label>
+      </div>
+      <div class="form-check mb-3">
+        {{ form.auto_on_period }}
+        <label class="form-check-label" for="{{ form.auto_on_period.id_for_label }}">
+          対象期間が追加されたとき
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">設定を保存</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

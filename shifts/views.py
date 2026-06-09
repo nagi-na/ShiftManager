@@ -14,6 +14,8 @@ from accounts.decorators import manager_required
 from accounts.models import User
 
 from .forms import (
+    AnnouncementForm,
+    AnnouncementSettingsForm,
     ConfirmedShiftForm,
     FixedShiftFormSet,
     NoteForm,
@@ -21,6 +23,10 @@ from .forms import (
     ShiftDayFormSet,
 )
 from .models import (
+    Announcement,
+    AnnouncementAttachment,
+    AnnouncementRead,
+    AnnouncementSettings,
     ConfirmedShift,
     FixedShiftChangeRequest,
     ShiftPeriod,
@@ -37,6 +43,7 @@ WEEKDAYS_JP = ["月", "火", "水", "木", "金", "土", "日"]
 def home(request):
     """S2 ホーム（対象期間選択）。"""
     now = timezone.now()
+    unread = _unread_announcement_count(request.user)
     # スタッフに表示する期間のみ（非表示はホームに出さない）
     periods = list(ShiftPeriod.objects.filter(is_visible=True))
 
@@ -49,7 +56,11 @@ def home(request):
             }
             for p in periods
         ]
-        return render(request, "shifts/home.html", {"items": items, "is_manager": True})
+        return render(
+            request,
+            "shifts/home.html",
+            {"items": items, "is_manager": True, "unread_announcements": unread},
+        )
 
     submitted_period_ids = set(
         ShiftRequest.objects.filter(user=request.user).values_list("period_id", flat=True)
@@ -70,7 +81,11 @@ def home(request):
                 "manually_closed": _manually_closed(p, now),
             }
         )
-    return render(request, "shifts/home.html", {"items": items, "is_manager": False})
+    return render(
+        request,
+        "shifts/home.html",
+        {"items": items, "is_manager": False, "unread_announcements": unread},
+    )
 
 
 @login_required
@@ -637,6 +652,136 @@ def manage_fixed_shift_request_review(request, pk):
     )
 
 
+# ----- お知らせ -----
+
+def _unread_announcement_count(user):
+    """このユーザーの未読お知らせ件数。"""
+    return Announcement.objects.exclude(reads__user=user).count()
+
+
+def _auto_announce(category, title, body="", period=None, by=None):
+    """設定がオンのときだけ、自動お知らせを投稿する。"""
+    cfg = AnnouncementSettings.load()
+    enabled = {
+        Announcement.Category.CONFIRMED: cfg.auto_on_confirmed,
+        Announcement.Category.PERIOD: cfg.auto_on_period,
+    }.get(category, False)
+    if not enabled:
+        return None
+    return Announcement.objects.create(
+        title=title,
+        body=body,
+        category=category,
+        related_period=period,
+        created_by=by,
+    )
+
+
+@login_required
+def announcements(request):
+    """お知らせ一覧。開いた時点で未読を既読にする。"""
+    items = list(Announcement.objects.prefetch_related("attachments").all())
+    read_ids = set(
+        AnnouncementRead.objects.filter(
+            user=request.user, announcement__in=items
+        ).values_list("announcement_id", flat=True)
+    )
+    to_mark = [
+        AnnouncementRead(announcement=a, user=request.user)
+        for a in items
+        if a.id not in read_ids
+    ]
+    if to_mark:
+        AnnouncementRead.objects.bulk_create(to_mark, ignore_conflicts=True)
+    return render(request, "shifts/announcements.html", {"items": items})
+
+
+@login_required
+def announcement_attachment(request, pk):
+    """お知らせ添付の配信。ログイン必須＋本番は X-Accel-Redirect（確定シフトと同方式）。"""
+    att = get_object_or_404(AnnouncementAttachment, pk=pk)
+    name = att.file.name
+    content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    display_name = att.original_name or name.rsplit("/", 1)[-1]
+    disposition = "inline; filename*=UTF-8''" + quote(display_name)
+
+    if settings.DEBUG:
+        response = FileResponse(att.file.open("rb"), content_type=content_type)
+    else:
+        response = HttpResponse(content_type=content_type)
+        response["X-Accel-Redirect"] = "/protected/" + quote(name)
+    response["Content-Disposition"] = disposition
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+ANNOUNCE_ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf")
+ANNOUNCE_MAX_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+@manager_required
+def manage_announcements(request):
+    """お知らせの手動投稿（画像・PDFを複数添付可）と一覧・削除。"""
+    if request.method == "POST":
+        form = AnnouncementForm(request.POST)
+        files = request.FILES.getlist("files")
+        file_errors = []
+        for f in files:
+            if not f.name.lower().endswith(ANNOUNCE_ALLOWED_EXT):
+                file_errors.append(f"{f.name}: 画像かPDFを選んでください。")
+            elif f.size > ANNOUNCE_MAX_SIZE:
+                file_errors.append(f"{f.name}: 10MBまでにしてください。")
+        if form.is_valid() and not file_errors:
+            ann = form.save(commit=False)
+            ann.created_by = request.user
+            ann.category = Announcement.Category.MANUAL
+            ann.save()
+            for f in files:
+                AnnouncementAttachment.objects.create(
+                    announcement=ann, file=f, original_name=f.name
+                )
+            messages.success(request, "お知らせを投稿しました。")
+            return redirect("manage_announcements")
+        for e in file_errors:
+            messages.error(request, e)
+    else:
+        form = AnnouncementForm()
+
+    items = Announcement.objects.prefetch_related("attachments").all()
+    return render(
+        request, "shifts/manage_announcements.html", {"form": form, "items": items}
+    )
+
+
+@manager_required
+def manage_announcement_delete(request, pk):
+    """お知らせの削除（添付の実ファイルも削除）。"""
+    ann = get_object_or_404(Announcement, pk=pk)
+    if request.method == "POST":
+        for att in ann.attachments.all():
+            att.file.delete(save=False)
+        ann.delete()
+        messages.success(request, "お知らせを削除しました。")
+    return redirect("manage_announcements")
+
+
+@manager_required
+def manage_announcement_settings(request):
+    """自動投稿（確定シフト/期間追加）のオンオフ設定。"""
+    obj = AnnouncementSettings.load()
+    if request.method == "POST":
+        form = AnnouncementSettingsForm(request.POST, instance=obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "自動投稿の設定を保存しました。")
+            return redirect("manage_announcement_settings")
+    else:
+        form = AnnouncementSettingsForm(instance=obj)
+    return render(
+        request, "shifts/manage_announcement_settings.html", {"form": form}
+    )
+
+
 @login_required
 def confirmed_shift(request, pk):
     """S5 確定シフト閲覧。全員が閲覧、リーダーはアップロード・削除ができる。"""
@@ -666,6 +811,13 @@ def confirmed_shift(request, pk):
             cs.uploaded_by = request.user
             cs.original_name = form.cleaned_data["file"].name
             cs.save()
+            _auto_announce(
+                Announcement.Category.CONFIRMED,
+                title=f"確定シフトが公開されました（{period}）",
+                body="「確定シフト」のページからご確認ください。",
+                period=period,
+                by=request.user,
+            )
             messages.success(request, "確定シフトをアップロードしました。")
             return redirect("confirmed_shift", pk=pk)
 
@@ -737,6 +889,15 @@ def manage_periods(request):
             period = form.save(commit=False)
             period.created_by = request.user
             period.save()
+            if period.is_visible:
+                deadline = timezone.localtime(period.deadline).strftime("%Y/%m/%d %H:%M")
+                _auto_announce(
+                    Announcement.Category.PERIOD,
+                    title=f"新しいシフト期間が追加されました（{period}）",
+                    body=f"締切は {deadline} です。提出をお願いします。",
+                    period=period,
+                    by=request.user,
+                )
             messages.success(request, "対象期間を作成しました。")
             return redirect("manage_periods")
     else:

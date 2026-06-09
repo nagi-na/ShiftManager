@@ -5,11 +5,19 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h4 mb-0">{% if is_manager %}対象期間（管理）{% else %}シフト提出{% endif %}</h1>
-  {% if is_manager %}
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">管理メニュー</a>
-  {% else %}
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'my_fixed_shift' %}">固定シフトを確認</a>
-  {% endif %}
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm position-relative" href="{% url 'announcements' %}">
+      お知らせ
+      {% if unread_announcements %}
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">{{ unread_announcements }}</span>
+      {% endif %}
+    </a>
+    {% if is_manager %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_top' %}">管理メニュー</a>
+    {% else %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'my_fixed_shift' %}">固定シフトを確認</a>
+    {% endif %}
+  </div>
 </div>
 
 {% if not items %}

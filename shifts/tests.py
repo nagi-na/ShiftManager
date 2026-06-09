@@ -16,6 +16,9 @@ from django.utils import timezone
 from accounts.models import User
 
 from .models import (
+    Announcement,
+    AnnouncementAttachment,
+    AnnouncementSettings,
     ConfirmedShift,
     FixedShiftChangeRequest,
     ShiftPeriod,
@@ -545,3 +548,115 @@ class FixedShiftRequestApprovalTests(TestCase):
         self.assertRedirects(resp, reverse("home"))
         req.refresh_from_db()
         self.assertEqual(req.status, FixedShiftChangeRequest.Status.PENDING)  # 変わらない
+
+
+class AnnouncementTests(TestCase):
+    """お知らせ：手動投稿・添付・未読/既読・自動投稿・締切コマンド・添付配信。"""
+
+    def setUp(self):
+        self.leader = User.objects.create_user("leader", password="x")
+        self.leader.role = User.Role.LEADER
+        self.leader.save(update_fields=["role"])
+        self.crew = User.objects.create_user("crew", password="x")
+
+    def _period_post_data(self, visible=True):
+        today = timezone.localdate()
+        data = {
+            "title": "6月分",
+            "start_date": today.isoformat(),
+            "end_date": today.isoformat(),
+            "deadline": (timezone.now() + timedelta(days=3)).strftime("%Y-%m-%dT%H:%M"),
+            "status": "open",
+            "post_deadline_policy": "late_submit",
+        }
+        if visible:
+            data["is_visible"] = "on"
+        return data
+
+    # --- 手動投稿 ---
+
+    def test_manager_posts_with_attachment(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.leader)
+        img = SimpleUploadedFile("a.png", b"\x89PNG fake", content_type="image/png")
+        resp = self.client.post(
+            reverse("manage_announcements"),
+            {"title": "テスト", "body": "本文", "files": [img]},
+        )
+        self.assertRedirects(resp, reverse("manage_announcements"))
+        ann = Announcement.objects.get(title="テスト")
+        self.assertEqual(ann.category, Announcement.Category.MANUAL)
+        self.assertEqual(ann.attachments.count(), 1)
+        for att in ann.attachments.all():
+            att.file.delete(save=False)
+
+    def test_crew_cannot_post(self):
+        self.client.force_login(self.crew)
+        resp = self.client.post(reverse("manage_announcements"), {"title": "x"})
+        self.assertRedirects(resp, reverse("home"))
+        self.assertFalse(Announcement.objects.exists())
+
+    def test_invalid_attachment_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.leader)
+        bad = SimpleUploadedFile("a.exe", b"x", content_type="application/octet-stream")
+        resp = self.client.post(
+            reverse("manage_announcements"), {"title": "t", "files": [bad]}
+        )
+        self.assertEqual(resp.status_code, 200)  # 保存せず再表示
+        self.assertFalse(Announcement.objects.exists())
+
+    # --- 未読/既読 ---
+
+    def test_unread_then_read_after_open(self):
+        from shifts.views import _unread_announcement_count
+
+        Announcement.objects.create(title="a")
+        Announcement.objects.create(title="b")
+        self.assertEqual(_unread_announcement_count(self.crew), 2)
+        self.client.force_login(self.crew)
+        self.client.get(reverse("announcements"))
+        self.assertEqual(_unread_announcement_count(self.crew), 0)
+
+    # --- 自動投稿（期間追加） ---
+
+    def test_auto_announce_on_period_add(self):
+        self.client.force_login(self.leader)
+        self.client.post(reverse("manage_periods"), self._period_post_data())
+        self.assertTrue(
+            Announcement.objects.filter(category=Announcement.Category.PERIOD).exists()
+        )
+
+    def test_auto_announce_off_when_disabled(self):
+        cfg = AnnouncementSettings.load()
+        cfg.auto_on_period = False
+        cfg.save()
+        self.client.force_login(self.leader)
+        self.client.post(reverse("manage_periods"), self._period_post_data())
+        self.assertFalse(
+            Announcement.objects.filter(category=Announcement.Category.PERIOD).exists()
+        )
+
+    # --- 添付の認証配信 ---
+
+    def test_attachment_requires_login(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        ann = Announcement.objects.create(title="a")
+        att = AnnouncementAttachment.objects.create(
+            announcement=ann,
+            file=SimpleUploadedFile("a.png", b"x", content_type="image/png"),
+            original_name="a.png",
+        )
+        url = reverse("announcement_attachment", args=[att.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login/", resp["Location"])
+
+        self.client.force_login(self.crew)
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp["X-Accel-Redirect"].startswith("/protected/"))
+        att.file.delete(save=False)
