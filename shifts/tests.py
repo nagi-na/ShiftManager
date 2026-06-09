@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from accounts.models import User
 
-from .models import ShiftPeriod, ShiftRequest, ShiftRequestDay
+from .models import ConfirmedShift, ShiftPeriod, ShiftRequest, ShiftRequestDay
 from .views import _is_closed, _manually_closed, _submission_permission
 
 Policy = ShiftPeriod.PostDeadlinePolicy
@@ -225,3 +225,39 @@ class SubmitFlowTests(TestCase):
         hidden.save(update_fields=["is_visible"])
         resp = self.client.get(reverse("shift_submit", args=[hidden.pk]))
         self.assertRedirects(resp, reverse("home"))
+
+
+class ConfirmedFileAccessTests(TestCase):
+    """確定シフトPDFの配信が「ログイン必須」になっているかの検証。
+
+    無認証で直リンクから取得できると情報漏洩になるため、
+    未ログインは login へ飛ばし、ログイン済みのみ X-Accel-Redirect を返す。
+    """
+
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.leader = User.objects.create_user("leader", password="x")
+        self.cs = ConfirmedShift.objects.create(
+            period=make_period(self.leader, timezone.now() + timedelta(days=3)),
+            file=SimpleUploadedFile("確定.pdf", b"%PDF-1.4 dummy", content_type="application/pdf"),
+            original_name="確定.pdf",
+            uploaded_by=self.leader,
+        )
+        self.url = reverse("confirmed_shift_file", args=[self.cs.pk])
+
+    def tearDown(self):
+        self.cs.file.delete(save=False)
+
+    def test_anonymous_is_redirected_to_login(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login/", resp["Location"])
+
+    def test_logged_in_user_gets_x_accel_redirect(self):
+        # テスト実行時は DEBUG=False なので本番経路（X-Accel-Redirect）を通る。
+        self.client.force_login(self.leader)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp["X-Accel-Redirect"].startswith("/protected/"))
+        self.assertEqual(resp["Content-Type"], "application/pdf")

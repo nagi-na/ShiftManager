@@ -18,7 +18,7 @@
     {% for cs in files %}
     <div class="list-group-item d-flex justify-content-between align-items-center">
       <div>
-        <a href="{{ cs.file.url }}" target="_blank">{{ cs.original_name|default:"確定シフト.pdf" }}</a>
+        <a href="{% url 'confirmed_shift_file' cs.pk %}" target="_blank">{{ cs.original_name|default:"確定シフト.pdf" }}</a>
         <div class="text-muted small">{{ cs.uploaded_at|date:"Y/m/d H:i" }} にアップロード</div>
       </div>
       {% if user.can_manage %}

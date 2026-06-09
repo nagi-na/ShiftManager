@@ -8,6 +8,7 @@ urlpatterns = [
     path("periods/<int:pk>/status/", views.period_status, name="period_status"),
     path("requests/<int:pk>/history/", views.request_history, name="request_history"),
     path("periods/<int:pk>/confirmed/", views.confirmed_shift, name="confirmed_shift"),
+    path("confirmed-files/<int:pk>/", views.confirmed_shift_file, name="confirmed_shift_file"),
     # 管理系（リーダー専用）
     path("manage/", views.manage_top, name="manage_top"),
     path("manage/periods/", views.manage_periods, name="manage_periods"),

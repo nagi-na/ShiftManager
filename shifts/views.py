@@ -1,8 +1,12 @@
+import mimetypes
 from datetime import timedelta
+from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -298,6 +302,35 @@ def confirmed_shift(request, pk):
         "shifts/confirmed.html",
         {"period": period, "files": files, "form": form},
     )
+
+
+@login_required
+def confirmed_shift_file(request, pk):
+    """確定シフトPDFの配信。ログイン必須にして無認証ダウンロードを防ぐ。
+
+    本番では実ファイルの送信を nginx(X-Accel-Redirect) に委譲する。
+    nginx 側に `internal` の /protected/ ロケーション（media ルートを alias）を用意し、
+    /media/ への直接アクセスは塞いでおくこと。
+    開発(runserver, DEBUG=True)では nginx が無いので Django が直接返す。
+    """
+    cs = get_object_or_404(ConfirmedShift, pk=pk)
+    name = cs.file.name  # 例: confirmed_shifts/period_3/problem.pdf
+    content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    display_name = cs.original_name or name.rsplit("/", 1)[-1]
+    disposition = "inline; filename*=UTF-8''" + quote(display_name)
+
+    if settings.DEBUG:
+        # 開発用: Django が直接ファイルを返す
+        response = FileResponse(cs.file.open("rb"), content_type=content_type)
+    else:
+        # 本番: 認証だけ Django が行い、送信は nginx に任せる
+        response = HttpResponse(content_type=content_type)
+        response["X-Accel-Redirect"] = "/protected/" + quote(name)
+    response["Content-Disposition"] = disposition
+    # 認証済みファイルなので CDN/プロキシにキャッシュさせない
+    # （Cloudflare 等のエッジに残ると無認証で配られてしまうため）
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @manager_required
