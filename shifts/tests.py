@@ -676,6 +676,20 @@ class AnnouncementTests(TestCase):
             ).exists()
         )
 
+    # --- 1週間で自動削除 ---
+
+    def test_old_announcements_pruned_on_open(self):
+        old = Announcement.objects.create(title="古い")
+        # created_at は auto_now_add のため、作成後に直接書き換える
+        Announcement.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(days=8)
+        )
+        fresh = Announcement.objects.create(title="新しい")
+        self.client.force_login(self.crew)
+        self.client.get(reverse("announcements"))
+        self.assertFalse(Announcement.objects.filter(pk=old.pk).exists())
+        self.assertTrue(Announcement.objects.filter(pk=fresh.pk).exists())
+
     # --- 添付の認証配信 ---
 
     def test_attachment_requires_login(self):

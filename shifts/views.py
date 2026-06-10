@@ -43,6 +43,7 @@ WEEKDAYS_JP = ["月", "火", "水", "木", "金", "土", "日"]
 def home(request):
     """S2 ホーム（対象期間選択）。"""
     now = timezone.now()
+    _prune_old_announcements()
     unread = _unread_announcement_count(request.user)
     # スタッフに表示する期間のみ（非表示はホームに出さない）
     periods = list(ShiftPeriod.objects.filter(is_visible=True))
@@ -671,6 +672,22 @@ def manage_fixed_shift_request_review(request, pk):
 
 # ----- お知らせ -----
 
+ANNOUNCEMENT_RETENTION_DAYS = 7  # 投稿からこの日数を過ぎたお知らせは自動削除
+
+
+def _prune_old_announcements():
+    """投稿から一定日数を過ぎたお知らせを、添付の実ファイルごと削除する。
+
+    cron 等を使わず、お知らせを表示するタイミングで掃除する方式。
+    """
+    cutoff = timezone.now() - timedelta(days=ANNOUNCEMENT_RETENTION_DAYS)
+    old = Announcement.objects.filter(created_at__lt=cutoff)
+    for ann in old.prefetch_related("attachments"):
+        for att in ann.attachments.all():
+            att.file.delete(save=False)
+    old.delete()
+
+
 def _unread_announcement_count(user):
     """このユーザーの未読お知らせ件数。"""
     return Announcement.objects.exclude(reads__user=user).count()
@@ -696,6 +713,7 @@ def _auto_announce(category, title, body="", period=None, by=None):
 @login_required
 def announcements(request):
     """お知らせ一覧。開いた時点で未読を既読にする。"""
+    _prune_old_announcements()
     items = list(
         Announcement.objects.select_related("created_by")
         .prefetch_related("attachments")
@@ -742,6 +760,7 @@ ANNOUNCE_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 @manager_required
 def manage_announcements(request):
     """お知らせの手動投稿（画像・PDFを複数添付可）と一覧・削除。"""
+    _prune_old_announcements()
     if request.method == "POST":
         form = AnnouncementForm(request.POST)
         files = request.FILES.getlist("files")
