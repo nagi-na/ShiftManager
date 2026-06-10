@@ -314,7 +314,6 @@ class ConfirmedShift(models.Model):
 class AnnouncementSettings(models.Model):
     """自動投稿のオンオフ（シングルトン：常に1行）。"""
 
-    auto_on_confirmed = models.BooleanField("確定シフト公開時に自動投稿", default=True)
     auto_on_period = models.BooleanField("対象期間の追加時に自動投稿", default=True)
 
     class Meta:

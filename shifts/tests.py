@@ -639,6 +639,43 @@ class AnnouncementTests(TestCase):
             Announcement.objects.filter(category=Announcement.Category.PERIOD).exists()
         )
 
+    # --- 確定シフト公開のお知らせ（ボタン投稿） ---
+
+    def _make_period(self):
+        today = timezone.localdate()
+        return ShiftPeriod.objects.create(
+            title="6月分",
+            start_date=today,
+            end_date=today,
+            deadline=timezone.now() + timedelta(days=3),
+            created_by=self.leader,
+        )
+
+    def test_confirmed_announce_button_posts(self):
+        period = self._make_period()
+        self.client.force_login(self.leader)
+        resp = self.client.post(
+            reverse("confirmed_shift", args=[period.pk]), {"announce": "1"}
+        )
+        self.assertRedirects(resp, reverse("confirmed_shift", args=[period.pk]))
+        self.assertTrue(
+            Announcement.objects.filter(
+                category=Announcement.Category.CONFIRMED, related_period=period
+            ).exists()
+        )
+
+    def test_confirmed_announce_button_requires_manager(self):
+        period = self._make_period()
+        self.client.force_login(self.crew)
+        self.client.post(
+            reverse("confirmed_shift", args=[period.pk]), {"announce": "1"}
+        )
+        self.assertFalse(
+            Announcement.objects.filter(
+                category=Announcement.Category.CONFIRMED
+            ).exists()
+        )
+
     # --- 添付の認証配信 ---
 
     def test_attachment_requires_login(self):

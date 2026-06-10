@@ -540,16 +540,33 @@ def manage_fixed_shifts(request):
 @manager_required
 def manage_fixed_shift_edit(request, user_pk):
     """リーダー・管理者が、対象クルーの固定シフトを代理編集する。"""
-    target = get_object_or_404(User, pk=user_pk)
+    target = get_object_or_404(User, pk=user_pk, role=User.Role.CREW)
+
+    has_pending = target.fixed_shift_requests.filter(
+        status=FixedShiftChangeRequest.Status.PENDING
+    ).exists()
 
     if request.method == "POST":
         formset = FixedShiftFormSet(request.POST, prefix="fx")
         if formset.is_valid():
             _save_fixed_shift(target, formset)
             messages.success(request, f"「{target.name}」の固定シフトを保存しました。")
+            if has_pending:
+                messages.warning(
+                    request,
+                    f"「{target.name}」には未処理の変更申請があります。"
+                    "今の保存内容が、その申請を承認すると上書きされる可能性があります。"
+                    "申請一覧から処理してください。",
+                )
             return redirect("manage_fixed_shifts")
     else:
         formset = FixedShiftFormSet(initial=_fixed_shift_initial(target), prefix="fx")
+        if has_pending:
+            messages.warning(
+                request,
+                f"「{target.name}」には未処理の変更申請があります。"
+                "代理編集の前に、申請一覧での処理を検討してください。",
+            )
 
     return render(
         request,
@@ -663,7 +680,6 @@ def _auto_announce(category, title, body="", period=None, by=None):
     """設定がオンのときだけ、自動お知らせを投稿する。"""
     cfg = AnnouncementSettings.load()
     enabled = {
-        Announcement.Category.CONFIRMED: cfg.auto_on_confirmed,
         Announcement.Category.PERIOD: cfg.auto_on_period,
     }.get(category, False)
     if not enabled:
@@ -680,7 +696,11 @@ def _auto_announce(category, title, body="", period=None, by=None):
 @login_required
 def announcements(request):
     """お知らせ一覧。開いた時点で未読を既読にする。"""
-    items = list(Announcement.objects.prefetch_related("attachments").all())
+    items = list(
+        Announcement.objects.select_related("created_by")
+        .prefetch_related("attachments")
+        .all()
+    )
     read_ids = set(
         AnnouncementRead.objects.filter(
             user=request.user, announcement__in=items
@@ -803,6 +823,18 @@ def confirmed_shift(request, pk):
                 messages.success(request, "確定シフトを削除しました。")
             return redirect("confirmed_shift", pk=pk)
 
+        # クルーへお知らせを投稿（ボタンで明示的に。自動投稿ではない）
+        if request.POST.get("announce"):
+            Announcement.objects.create(
+                title=f"確定シフトが公開されました（{period}）",
+                body="「確定シフト」のページからご確認ください。",
+                category=Announcement.Category.CONFIRMED,
+                related_period=period,
+                created_by=request.user,
+            )
+            messages.success(request, "確定シフトのお知らせをクルーに投稿しました。")
+            return redirect("confirmed_shift", pk=pk)
+
         # アップロード
         form = ConfirmedShiftForm(request.POST, request.FILES)
         if form.is_valid():
@@ -811,13 +843,6 @@ def confirmed_shift(request, pk):
             cs.uploaded_by = request.user
             cs.original_name = form.cleaned_data["file"].name
             cs.save()
-            _auto_announce(
-                Announcement.Category.CONFIRMED,
-                title=f"確定シフトが公開されました（{period}）",
-                body="「確定シフト」のページからご確認ください。",
-                period=period,
-                by=request.user,
-            )
             messages.success(request, "確定シフトをアップロードしました。")
             return redirect("confirmed_shift", pk=pk)
 

@@ -14,18 +14,15 @@
   <div class="card-body">
     <form method="post">
       {% csrf_token %}
-      <div class="form-check mb-2">
-        {{ form.auto_on_confirmed }}
-        <label class="form-check-label" for="{{ form.auto_on_confirmed.id_for_label }}">
-          確定シフトが公開されたとき
-        </label>
-      </div>
       <div class="form-check mb-3">
         {{ form.auto_on_period }}
         <label class="form-check-label" for="{{ form.auto_on_period.id_for_label }}">
           対象期間が追加されたとき
         </label>
       </div>
+      <p class="text-muted small">
+        確定シフトの公開は自動投稿ではなく、各期間の「確定シフト」ページの<strong>「お知らせを投稿」</strong>ボタンから投稿します。
+      </p>
       <button type="submit" class="btn btn-primary btn-sm">設定を保存</button>
     </form>
   </div>

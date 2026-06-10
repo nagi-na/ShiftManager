@@ -11,7 +11,7 @@
 | 種別 | 投稿のされ方 |
 | --- | --- |
 | お知らせ（manual） | リーダー/管理者が手動投稿（タイトル・本文・添付） |
-| 確定シフト（confirmed） | 確定シフトをアップロードしたとき自動 |
+| 確定シフト（confirmed） | 各期間の「確定シフト」ページの**「お知らせを投稿」ボタン**を押したとき |
 | 期間追加（period） | 対象期間を追加（表示ON）したとき自動 |
 
 ### 2-2. クルー側
@@ -21,14 +21,15 @@
 
 ### 2-3. リーダー/管理者側
 - 「お知らせ管理」：タイトル・本文・**添付（画像/PDFを複数・各10MBまで）**で投稿、一覧、削除。
-- 「自動投稿の設定」：確定シフト/期間追加の**2種を個別にオンオフ**。
+- 「確定シフト」ページに**「お知らせを投稿」ボタン**（押すたびに確定シフト公開のお知らせを投稿）。
+- 「自動投稿の設定」：**期間追加のオンオフ**（確定シフトはボタン投稿のため設定なし）。
 - 権限は `@manager_required`（リーダー・管理者）。
 
 ## 3. データモデル（`shifts/models.py`）
 - `Announcement`（title / body / category / related_period / created_by / created_at）
 - `AnnouncementAttachment`（announcement / file / original_name、`is_image` プロパティ）
 - `AnnouncementRead`（announcement / user / read_at、`unique(announcement, user)`）
-- `AnnouncementSettings`（シングルトン：auto_on_confirmed / auto_on_period、`load()`）
+- `AnnouncementSettings`（シングルトン：auto_on_period、`load()`）
 
 ## 4. 実装メモ（変更ファイル）
 - `shifts/models.py` … 上記4モデル。
@@ -36,7 +37,7 @@
 - `shifts/views.py`
   - クルー：`announcements`（一覧＋既読化）、`announcement_attachment`（認証付き配信）、`home` に未読数。
   - 管理：`manage_announcements`（投稿＋一覧＋削除入口）、`manage_announcement_delete`、`manage_announcement_settings`。
-  - 自動：`_auto_announce()` ヘルパー。`confirmed_shift` アップロード成功時と `manage_periods` 作成時に呼ぶ。
+  - 自動：`_auto_announce()` ヘルパー。`manage_periods` 作成時に呼ぶ（期間追加のみ）。確定シフトは `confirmed_shift` の `announce` POST で投稿。
 - テンプレート：`announcements.html`、`manage_announcements.html`、`manage_announcement_settings.html`、`home.html`（お知らせボタン＋バッジ）、`manage_top.html`（お知らせ管理カード）。
 - `shifts/admin.py` … `Announcement`（添付インライン）・`AnnouncementSettings` を登録。
 - 添付の配信は既存の nginx `/protected/`（internal, mediaルート）をそのまま利用（nginx設定の追加変更は不要）。
@@ -58,6 +59,6 @@ sudo systemctl restart shiftmanager
 - [ ] リーダーは画像/PDFを複数添付してお知らせを投稿でき、クルーは一覧で閲覧できる（画像はインライン）。
 - [ ] クルーに未読バッジが出て、一覧を開くと消える（クルーごとに既読）。
 - [ ] 添付は未ログインだと開けず（login へ）、ログイン時は認証付きで配信される。
-- [ ] 確定シフト公開・期間追加で、設定ON時のみ自動投稿される。
-- [ ] 自動投稿2種を管理画面で個別にオンオフできる。
+- [ ] 「確定シフト」ページの「お知らせを投稿」ボタンで確定シフト公開のお知らせが投稿される。
+- [ ] 期間追加で、設定ON時のみ自動投稿される（管理画面でオンオフできる）。
 - [ ] `migrate` 後、既存データが保持されている。

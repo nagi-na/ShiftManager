@@ -187,8 +187,7 @@ class AnnouncementSettingsForm(forms.ModelForm):
 
     class Meta:
         model = AnnouncementSettings
-        fields = ["auto_on_confirmed", "auto_on_period"]
+        fields = ["auto_on_period"]
         widgets = {
-            "auto_on_confirmed": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "auto_on_period": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

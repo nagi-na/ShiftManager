@@ -72,4 +72,4 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 @admin.register(AnnouncementSettings)
 class AnnouncementSettingsAdmin(admin.ModelAdmin):
-    list_display = ("auto_on_confirmed", "auto_on_period")
+    list_display = ("auto_on_period",)
