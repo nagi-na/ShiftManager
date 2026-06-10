@@ -582,11 +582,12 @@ class AnnouncementTests(TestCase):
         img = SimpleUploadedFile("a.png", b"\x89PNG fake", content_type="image/png")
         resp = self.client.post(
             reverse("manage_announcements"),
-            {"title": "テスト", "body": "本文", "files": [img]},
+            {"title": "テスト", "level": "warning", "body": "本文", "files": [img]},
         )
         self.assertRedirects(resp, reverse("manage_announcements"))
         ann = Announcement.objects.get(title="テスト")
         self.assertEqual(ann.category, Announcement.Category.MANUAL)
+        self.assertEqual(ann.level, Announcement.Level.WARNING)
         self.assertEqual(ann.attachments.count(), 1)
         for att in ann.attachments.all():
             att.file.delete(save=False)
@@ -610,14 +611,20 @@ class AnnouncementTests(TestCase):
 
     # --- 未読/既読 ---
 
-    def test_unread_then_read_after_open(self):
+    def test_unread_until_detail_opened(self):
         from shifts.views import _unread_announcement_count
 
-        Announcement.objects.create(title="a")
-        Announcement.objects.create(title="b")
+        a = Announcement.objects.create(title="a")
+        b = Announcement.objects.create(title="b")
         self.assertEqual(_unread_announcement_count(self.crew), 2)
         self.client.force_login(self.crew)
+        # 一覧を開いただけでは既読にしない
         self.client.get(reverse("announcements"))
+        self.assertEqual(_unread_announcement_count(self.crew), 2)
+        # 詳細を開いたものだけ既読になる
+        self.client.get(reverse("announcement_detail", args=[a.pk]))
+        self.assertEqual(_unread_announcement_count(self.crew), 1)
+        self.client.get(reverse("announcement_detail", args=[b.pk]))
         self.assertEqual(_unread_announcement_count(self.crew), 0)
 
     # --- 自動投稿（期間追加） ---

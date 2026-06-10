@@ -7,7 +7,7 @@
   <h1 class="h4 mb-0">{% if is_manager %}対象期間（管理）{% else %}シフト提出{% endif %}</h1>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary btn-sm position-relative" href="{% url 'announcements' %}">
-      お知らせ
+      アナウンス
       {% if unread_announcements %}
         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">{{ unread_announcements }}</span>
       {% endif %}

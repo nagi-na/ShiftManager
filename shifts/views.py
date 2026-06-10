@@ -670,15 +670,15 @@ def manage_fixed_shift_request_review(request, pk):
     )
 
 
-# ----- お知らせ -----
+# ----- アナウンス -----
 
-ANNOUNCEMENT_RETENTION_DAYS = 7  # 投稿からこの日数を過ぎたお知らせは自動削除
+ANNOUNCEMENT_RETENTION_DAYS = 7  # 投稿からこの日数を過ぎたアナウンスは自動削除
 
 
 def _prune_old_announcements():
-    """投稿から一定日数を過ぎたお知らせを、添付の実ファイルごと削除する。
+    """投稿から一定日数を過ぎたアナウンスを、添付の実ファイルごと削除する。
 
-    cron 等を使わず、お知らせを表示するタイミングで掃除する方式。
+    cron 等を使わず、アナウンスを表示するタイミングで掃除する方式。
     """
     cutoff = timezone.now() - timedelta(days=ANNOUNCEMENT_RETENTION_DAYS)
     old = Announcement.objects.filter(created_at__lt=cutoff)
@@ -689,12 +689,14 @@ def _prune_old_announcements():
 
 
 def _unread_announcement_count(user):
-    """このユーザーの未読お知らせ件数。"""
+    """このユーザーの未読アナウンス件数。"""
     return Announcement.objects.exclude(reads__user=user).count()
 
 
-def _auto_announce(category, title, body="", period=None, by=None):
-    """設定がオンのときだけ、自動お知らせを投稿する。"""
+def _auto_announce(
+    category, title, body="", period=None, by=None, level=Announcement.Level.INFO
+):
+    """設定がオンのときだけ、自動アナウンスを投稿する。"""
     cfg = AnnouncementSettings.load()
     enabled = {
         Announcement.Category.PERIOD: cfg.auto_on_period,
@@ -705,6 +707,7 @@ def _auto_announce(category, title, body="", period=None, by=None):
         title=title,
         body=body,
         category=category,
+        level=level,
         related_period=period,
         created_by=by,
     )
@@ -712,7 +715,7 @@ def _auto_announce(category, title, body="", period=None, by=None):
 
 @login_required
 def announcements(request):
-    """お知らせ一覧。開いた時点で未読を既読にする。"""
+    """アナウンス一覧（タイトル＋抜粋）。既読は詳細を開いたときに付ける。"""
     _prune_old_announcements()
     items = list(
         Announcement.objects.select_related("created_by")
@@ -724,19 +727,28 @@ def announcements(request):
             user=request.user, announcement__in=items
         ).values_list("announcement_id", flat=True)
     )
-    to_mark = [
-        AnnouncementRead(announcement=a, user=request.user)
-        for a in items
-        if a.id not in read_ids
-    ]
-    if to_mark:
-        AnnouncementRead.objects.bulk_create(to_mark, ignore_conflicts=True)
+    for a in items:
+        a.is_unread = a.id not in read_ids
     return render(request, "shifts/announcements.html", {"items": items})
 
 
 @login_required
+def announcement_detail(request, pk):
+    """アナウンス詳細。開いた時点でこのユーザーの既読にする。"""
+    _prune_old_announcements()
+    ann = get_object_or_404(
+        Announcement.objects.select_related("created_by").prefetch_related(
+            "attachments"
+        ),
+        pk=pk,
+    )
+    AnnouncementRead.objects.get_or_create(announcement=ann, user=request.user)
+    return render(request, "shifts/announcement_detail.html", {"a": ann})
+
+
+@login_required
 def announcement_attachment(request, pk):
-    """お知らせ添付の配信。ログイン必須＋本番は X-Accel-Redirect（確定シフトと同方式）。"""
+    """アナウンス添付の配信。ログイン必須＋本番は X-Accel-Redirect（確定シフトと同方式）。"""
     att = get_object_or_404(AnnouncementAttachment, pk=pk)
     name = att.file.name
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -759,7 +771,7 @@ ANNOUNCE_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
 @manager_required
 def manage_announcements(request):
-    """お知らせの手動投稿（画像・PDFを複数添付可）と一覧・削除。"""
+    """アナウンスの手動投稿（画像・PDFを複数添付可）と一覧・削除。"""
     _prune_old_announcements()
     if request.method == "POST":
         form = AnnouncementForm(request.POST)
@@ -779,7 +791,7 @@ def manage_announcements(request):
                 AnnouncementAttachment.objects.create(
                     announcement=ann, file=f, original_name=f.name
                 )
-            messages.success(request, "お知らせを投稿しました。")
+            messages.success(request, "アナウンスを投稿しました。")
             return redirect("manage_announcements")
         for e in file_errors:
             messages.error(request, e)
@@ -794,13 +806,13 @@ def manage_announcements(request):
 
 @manager_required
 def manage_announcement_delete(request, pk):
-    """お知らせの削除（添付の実ファイルも削除）。"""
+    """アナウンスの削除（添付の実ファイルも削除）。"""
     ann = get_object_or_404(Announcement, pk=pk)
     if request.method == "POST":
         for att in ann.attachments.all():
             att.file.delete(save=False)
         ann.delete()
-        messages.success(request, "お知らせを削除しました。")
+        messages.success(request, "アナウンスを削除しました。")
     return redirect("manage_announcements")
 
 
@@ -842,16 +854,17 @@ def confirmed_shift(request, pk):
                 messages.success(request, "確定シフトを削除しました。")
             return redirect("confirmed_shift", pk=pk)
 
-        # クルーへお知らせを投稿（ボタンで明示的に。自動投稿ではない）
+        # クルーへアナウンスを投稿（ボタンで明示的に。自動投稿ではない）
         if request.POST.get("announce"):
             Announcement.objects.create(
                 title=f"確定シフトが公開されました（{period}）",
                 body="「確定シフト」のページからご確認ください。",
                 category=Announcement.Category.CONFIRMED,
+                level=Announcement.Level.SUCCESS,
                 related_period=period,
                 created_by=request.user,
             )
-            messages.success(request, "確定シフトのお知らせをクルーに投稿しました。")
+            messages.success(request, "確定シフトのアナウンスをクルーに投稿しました。")
             return redirect("confirmed_shift", pk=pk)
 
         # アップロード

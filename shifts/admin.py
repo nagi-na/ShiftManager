@@ -65,8 +65,8 @@ class AnnouncementAttachmentInline(admin.TabularInline):
 
 @admin.register(Announcement)
 class AnnouncementAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "created_by", "created_at")
-    list_filter = ("category",)
+    list_display = ("title", "category", "level", "created_by", "created_at")
+    list_filter = ("category", "level")
     inlines = [AnnouncementAttachmentInline]
 
 

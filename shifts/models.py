@@ -317,11 +317,11 @@ class AnnouncementSettings(models.Model):
     auto_on_period = models.BooleanField("対象期間の追加時に自動投稿", default=True)
 
     class Meta:
-        verbose_name = "お知らせ自動投稿設定"
-        verbose_name_plural = "お知らせ自動投稿設定"
+        verbose_name = "アナウンス自動投稿設定"
+        verbose_name_plural = "アナウンス自動投稿設定"
 
     def __str__(self):
-        return "お知らせ自動投稿設定"
+        return "アナウンス自動投稿設定"
 
     def save(self, *args, **kwargs):
         self.pk = 1  # 常に1行に固定
@@ -334,17 +334,27 @@ class AnnouncementSettings(models.Model):
 
 
 class Announcement(models.Model):
-    """クルーへのお知らせ。手動投稿と自動投稿（確定シフト/期間追加）。"""
+    """クルーへのアナウンス。手動投稿と自動投稿（確定シフト/期間追加）。"""
 
     class Category(models.TextChoices):
-        MANUAL = "manual", "お知らせ"
+        MANUAL = "manual", "アナウンス"
         CONFIRMED = "confirmed", "確定シフト"
         PERIOD = "period", "期間追加"
+
+    class Level(models.TextChoices):
+        # 値は Bootstrap の alert-* と揃える
+        INFO = "info", "情報"
+        WARNING = "warning", "注意"
+        DANGER = "danger", "警告"
+        SUCCESS = "success", "完了"
 
     title = models.CharField("タイトル", max_length=100)
     body = models.TextField("本文", blank=True)
     category = models.CharField(
         "種別", max_length=16, choices=Category.choices, default=Category.MANUAL
+    )
+    level = models.CharField(
+        "表示レベル", max_length=16, choices=Level.choices, default=Level.INFO
     )
     related_period = models.ForeignKey(
         ShiftPeriod,
@@ -365,12 +375,21 @@ class Announcement(models.Model):
     created_at = models.DateTimeField("投稿日時", auto_now_add=True)
 
     class Meta:
-        verbose_name = "お知らせ"
-        verbose_name_plural = "お知らせ"
+        verbose_name = "アナウンス"
+        verbose_name_plural = "アナウンス"
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.title
+
+    @property
+    def level_icon(self):
+        return {
+            self.Level.INFO: "ℹ️",
+            self.Level.WARNING: "⚠️",
+            self.Level.DANGER: "⛔",
+            self.Level.SUCCESS: "✅",
+        }.get(self.level, "ℹ️")
 
 
 def announcement_upload_path(instance, filename):
@@ -378,11 +397,11 @@ def announcement_upload_path(instance, filename):
 
 
 class AnnouncementAttachment(models.Model):
-    """お知らせの添付ファイル（画像・PDF等）。"""
+    """アナウンスの添付ファイル（画像・PDF等）。"""
 
     announcement = models.ForeignKey(
         Announcement,
-        verbose_name="お知らせ",
+        verbose_name="アナウンス",
         on_delete=models.CASCADE,
         related_name="attachments",
     )
@@ -399,11 +418,11 @@ class AnnouncementAttachment(models.Model):
 
 
 class AnnouncementRead(models.Model):
-    """お知らせの既読記録（ユーザー×お知らせで1件）。"""
+    """アナウンスの既読記録（ユーザー×アナウンスで1件）。"""
 
     announcement = models.ForeignKey(
         Announcement,
-        verbose_name="お知らせ",
+        verbose_name="アナウンス",
         on_delete=models.CASCADE,
         related_name="reads",
     )

@@ -171,13 +171,14 @@ class NoteForm(forms.Form):
 
 
 class AnnouncementForm(forms.ModelForm):
-    """お知らせの手動投稿（タイトル・本文。添付はビューで request.FILES から処理）。"""
+    """アナウンスの手動投稿（タイトル・レベル・本文。添付はビューで request.FILES から処理）。"""
 
     class Meta:
         model = Announcement
-        fields = ["title", "body"]
+        fields = ["title", "level", "body"]
         widgets = {
             "title": forms.TextInput(attrs={"class": "form-control"}),
+            "level": forms.Select(attrs={"class": "form-select"}),
             "body": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
 

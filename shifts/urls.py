@@ -9,8 +9,9 @@ urlpatterns = [
     path("requests/<int:pk>/history/", views.request_history, name="request_history"),
     path("periods/<int:pk>/confirmed/", views.confirmed_shift, name="confirmed_shift"),
     path("confirmed-files/<int:pk>/", views.confirmed_shift_file, name="confirmed_shift_file"),
-    # お知らせ
+    # アナウンス
     path("announcements/", views.announcements, name="announcements"),
+    path("announcements/<int:pk>/", views.announcement_detail, name="announcement_detail"),
     path("announcement-files/<int:pk>/", views.announcement_attachment, name="announcement_attachment"),
     # 固定シフト（曜日別デフォルト）
     path("fixed-shift/", views.my_fixed_shift, name="my_fixed_shift"),
