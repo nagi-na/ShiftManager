@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}アナウンスを編集 | シフト提出{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">アナウンスを編集</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_announcements' %}">← アナウンス管理</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="mb-2">
+        <label class="form-label small mb-0">タイトル</label>
+        {{ form.title }}
+        {% if form.title.errors %}<div class="text-danger small">{{ form.title.errors|join:" / " }}</div>{% endif %}
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">表示レベル（マークと色）</label>
+        {{ form.level }}
+        <div class="form-text">ℹ️情報（青）／⚠️注意（黄）／⛔警告（赤）／✅完了（緑）</div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-0">本文（任意）</label>
+        {{ form.body }}
+      </div>
+
+      {% if ann.attachments.all %}
+      <div class="mb-2">
+        <label class="form-label small mb-0">現在の添付（チェックして更新で削除）</label>
+        {% for att in ann.attachments.all %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="remove_attachments"
+                 value="{{ att.pk }}" id="rm{{ att.pk }}">
+          <label class="form-check-label small" for="rm{{ att.pk }}">
+            🗑 {{ att.original_name|default:att.file.name }}
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label small mb-0">添付を追加（画像・PDF、複数可・各10MBまで）</label>
+        <input type="file" name="files" multiple accept="image/*,application/pdf" class="form-control">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-sm">更新する</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

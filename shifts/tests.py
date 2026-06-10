@@ -609,6 +609,44 @@ class AnnouncementTests(TestCase):
         self.assertEqual(resp.status_code, 200)  # 保存せず再表示
         self.assertFalse(Announcement.objects.exists())
 
+    # --- 編集 ---
+
+    def test_edit_changes_fields_and_removes_attachment(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        ann = Announcement.objects.create(title="旧", level=Announcement.Level.INFO)
+        att = AnnouncementAttachment.objects.create(
+            announcement=ann,
+            file=SimpleUploadedFile("a.png", b"x", content_type="image/png"),
+            original_name="a.png",
+        )
+        self.client.force_login(self.leader)
+        resp = self.client.post(
+            reverse("manage_announcement_edit", args=[ann.pk]),
+            {
+                "title": "新",
+                "level": "danger",
+                "body": "本文",
+                "remove_attachments": [str(att.pk)],
+            },
+        )
+        self.assertRedirects(resp, reverse("manage_announcements"))
+        ann.refresh_from_db()
+        self.assertEqual(ann.title, "新")
+        self.assertEqual(ann.level, Announcement.Level.DANGER)
+        self.assertFalse(ann.attachments.exists())
+
+    def test_crew_cannot_edit(self):
+        ann = Announcement.objects.create(title="旧")
+        self.client.force_login(self.crew)
+        resp = self.client.post(
+            reverse("manage_announcement_edit", args=[ann.pk]),
+            {"title": "新", "level": "info"},
+        )
+        self.assertRedirects(resp, reverse("home"))
+        ann.refresh_from_db()
+        self.assertEqual(ann.title, "旧")
+
     # --- 未読/既読 ---
 
     def test_unread_until_detail_opened(self):

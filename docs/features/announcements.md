@@ -36,7 +36,7 @@
 - 添付は画像はインライン表示、それ以外（PDF等）はダウンロードリンク。**ログイン必須の認証付き配信**（確定シフトと同じ X-Accel-Redirect 方式）。
 
 ### 2-3. リーダー/管理者側
-- 「アナウンス管理」：タイトル・**レベル**・本文・**添付（画像/PDFを複数・各10MBまで）**で投稿、一覧、削除。
+- 「アナウンス管理」：タイトル・**レベル**・本文・**添付（画像/PDFを複数・各10MBまで）**で投稿、一覧、**編集（本文等の変更・添付の追加/削除）**、削除。
 - 「確定シフト」ページに**「アナウンスを投稿」ボタン**（押すたびに確定シフト公開のアナウンスを投稿）。
 - 「自動投稿の設定」：**期間追加のオンオフ**（確定シフトはボタン投稿のため設定なし）。
 - 権限は `@manager_required`（リーダー・管理者）。
@@ -52,7 +52,7 @@
 - `shifts/forms.py` … `AnnouncementForm`（title/level/body）、`AnnouncementSettingsForm`。添付はビューで `request.FILES.getlist("files")` を処理。
 - `shifts/views.py`
   - クルー：`announcements`（一覧・未読フラグ）、`announcement_detail`（詳細＋既読化）、`announcement_attachment`（認証付き配信）、`home` に未読数。
-  - 管理：`manage_announcements`（投稿＋一覧＋削除入口）、`manage_announcement_delete`、`manage_announcement_settings`。
+  - 管理：`manage_announcements`（投稿＋一覧）、`manage_announcement_edit`（編集・添付追加/削除）、`manage_announcement_delete`、`manage_announcement_settings`。添付検証は `_announcement_file_errors()` を共用。
   - 自動：`_auto_announce()` ヘルパー。`manage_periods` 作成時に呼ぶ（期間追加のみ）。確定シフトは `confirmed_shift` の `announce` POST で投稿。
 - テンプレート：`announcements.html`（一覧・リンク）、`announcement_detail.html`（詳細）、`manage_announcements.html`、`manage_announcement_settings.html`、`home.html`（アナウンスボタン＋バッジ）、`manage_top.html`（アナウンス管理カード）。
 - `shifts/admin.py` … `Announcement`（添付インライン）・`AnnouncementSettings` を登録。

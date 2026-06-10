@@ -769,6 +769,17 @@ ANNOUNCE_ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf")
 ANNOUNCE_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
 
+def _announcement_file_errors(files):
+    """添付ファイル（画像/PDF・各10MB）の検証エラー文言リストを返す。"""
+    errors = []
+    for f in files:
+        if not f.name.lower().endswith(ANNOUNCE_ALLOWED_EXT):
+            errors.append(f"{f.name}: 画像かPDFを選んでください。")
+        elif f.size > ANNOUNCE_MAX_SIZE:
+            errors.append(f"{f.name}: 10MBまでにしてください。")
+    return errors
+
+
 @manager_required
 def manage_announcements(request):
     """アナウンスの手動投稿（画像・PDFを複数添付可）と一覧・削除。"""
@@ -776,12 +787,7 @@ def manage_announcements(request):
     if request.method == "POST":
         form = AnnouncementForm(request.POST)
         files = request.FILES.getlist("files")
-        file_errors = []
-        for f in files:
-            if not f.name.lower().endswith(ANNOUNCE_ALLOWED_EXT):
-                file_errors.append(f"{f.name}: 画像かPDFを選んでください。")
-            elif f.size > ANNOUNCE_MAX_SIZE:
-                file_errors.append(f"{f.name}: 10MBまでにしてください。")
+        file_errors = _announcement_file_errors(files)
         if form.is_valid() and not file_errors:
             ann = form.save(commit=False)
             ann.created_by = request.user
@@ -801,6 +807,40 @@ def manage_announcements(request):
     items = Announcement.objects.prefetch_related("attachments").all()
     return render(
         request, "shifts/manage_announcements.html", {"form": form, "items": items}
+    )
+
+
+@manager_required
+def manage_announcement_edit(request, pk):
+    """アナウンスの編集（タイトル・レベル・本文の変更、添付の追加・削除）。"""
+    ann = get_object_or_404(
+        Announcement.objects.prefetch_related("attachments"), pk=pk
+    )
+    if request.method == "POST":
+        form = AnnouncementForm(request.POST, instance=ann)
+        files = request.FILES.getlist("files")
+        file_errors = _announcement_file_errors(files)
+        remove_ids = request.POST.getlist("remove_attachments")
+        if form.is_valid() and not file_errors:
+            form.save()
+            # 選択された既存添付を実ファイルごと削除
+            for att in ann.attachments.filter(pk__in=remove_ids):
+                att.file.delete(save=False)
+                att.delete()
+            # 新規添付を追加
+            for f in files:
+                AnnouncementAttachment.objects.create(
+                    announcement=ann, file=f, original_name=f.name
+                )
+            messages.success(request, "アナウンスを更新しました。")
+            return redirect("manage_announcements")
+        for e in file_errors:
+            messages.error(request, e)
+    else:
+        form = AnnouncementForm(instance=ann)
+
+    return render(
+        request, "shifts/manage_announcement_edit.html", {"form": form, "ann": ann}
     )
 
 

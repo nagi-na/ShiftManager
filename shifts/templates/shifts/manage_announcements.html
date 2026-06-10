@@ -61,6 +61,7 @@
           <td>{{ a.title }}</td>
           <td class="small">{{ a.attachments.count }}</td>
           <td class="text-nowrap">
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'manage_announcement_edit' a.pk %}">編集</a>
             <form method="post" action="{% url 'manage_announcement_delete' a.pk %}" class="d-inline"
                   onsubmit="return confirm('このアナウンスを削除します。よろしいですか？');">
               {% csrf_token %}

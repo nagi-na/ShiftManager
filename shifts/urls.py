@@ -23,6 +23,7 @@ urlpatterns = [
     path("manage/fixed-shift-requests/", views.manage_fixed_shift_requests, name="manage_fixed_shift_requests"),
     path("manage/fixed-shift-requests/<int:pk>/review/", views.manage_fixed_shift_request_review, name="manage_fixed_shift_request_review"),
     path("manage/announcements/", views.manage_announcements, name="manage_announcements"),
+    path("manage/announcements/<int:pk>/edit/", views.manage_announcement_edit, name="manage_announcement_edit"),
     path("manage/announcements/<int:pk>/delete/", views.manage_announcement_delete, name="manage_announcement_delete"),
     path("manage/announcement-settings/", views.manage_announcement_settings, name="manage_announcement_settings"),
     path("manage/periods/", views.manage_periods, name="manage_periods"),
