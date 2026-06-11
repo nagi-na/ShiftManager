@@ -237,3 +237,49 @@ hr { border-color: var(--line); }
   font-size: .8rem;
   letter-spacing: .14em;
 }
+
+/* ---------- アニメーション（しっかり見せる） ----------
+   - ページ間はスライド＋フェードで切り替え（View Transitions API。
+     非対応ブラウザは通常遷移＋下記の出現アニメで対応）
+   - ページの中身はふわっと、カードは下から順番にせり上がる（stagger）
+   - ボタンはホバーで浮き、押すとぐっと沈む
+   - OSで「視差効果を減らす/アニメーション最小」を選ぶ人には自動でオフ */
+
+/* ページ間遷移：旧ページは上へ抜け、新ページは下からせり上がる */
+@view-transition { navigation: auto; }
+@keyframes vt-old { to   { opacity: 0; transform: translateY(-14px) scale(.99); } }
+@keyframes vt-new { from { opacity: 0; transform: translateY(22px)  scale(.99); } }
+::view-transition-old(root) { animation: vt-old .26s ease both; }
+::view-transition-new(root) { animation: vt-new .40s cubic-bezier(.22,.61,.36,1) both; }
+
+/* ページの中身がふわっと出現（全ブラウザ・JS不要・遅延なし） */
+@keyframes app-fade-in { from { opacity: 0; } to { opacity: 1; } }
+main.container { animation: app-fade-in .35s ease-out both; }
+
+/* カード（ホーム等の並ぶ列）は下から順番にせり上がる（軽い行き過ぎ付き） */
+@keyframes app-rise {
+  from { opacity: 0; transform: translateY(24px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.row.g-3 > [class*="col-"] { animation: app-rise .5s cubic-bezier(.34,1.4,.64,1) both; }
+.row.g-3 > [class*="col-"]:nth-child(1) { animation-delay: .04s; }
+.row.g-3 > [class*="col-"]:nth-child(2) { animation-delay: .10s; }
+.row.g-3 > [class*="col-"]:nth-child(3) { animation-delay: .16s; }
+.row.g-3 > [class*="col-"]:nth-child(4) { animation-delay: .22s; }
+.row.g-3 > [class*="col-"]:nth-child(5) { animation-delay: .28s; }
+.row.g-3 > [class*="col-"]:nth-child(6) { animation-delay: .34s; }
+.row.g-3 > [class*="col-"]:nth-child(n+7) { animation-delay: .40s; }
+
+/* ボタン：ホバーで浮き、押すとぐっと沈む */
+.btn { transition: transform .14s cubic-bezier(.34,1.4,.64,1), box-shadow .15s ease, background-color .15s ease; }
+.btn:hover  { transform: translateY(-2px); }
+.btn:active { transform: translateY(1px) scale(.94); }
+
+/* カードのホバーを少し強めに浮かせる */
+.row.g-3 .card.h-100:hover { transform: translateY(-4px); }
+
+/* 「動きを減らす」設定の端末ではアニメーションを無効化 */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
