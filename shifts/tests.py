@@ -813,3 +813,37 @@ class AnnouncementTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp["X-Accel-Redirect"].startswith("/protected/"))
         att.file.delete(save=False)
+
+
+class StatusPdfTests(TestCase):
+    """提出状況のA4 PDF出力（period_status_pdf）の権限と中身を検証。"""
+
+    def setUp(self):
+        self.leader = User.objects.create_user("leader", password="x")
+        self.leader.role = User.Role.LEADER
+        self.leader.save()
+        self.crew = User.objects.create_user("crew", password="x")  # 既定 crew
+        today = timezone.localdate()
+        self.period = make_period(
+            self.leader, timezone.now() + timedelta(days=1),
+            start=today, end=today + timedelta(days=6),
+        )
+        req = ShiftRequest.objects.create(period=self.period, user=self.crew)
+        ShiftRequestDay.objects.create(
+            request=req, work_date=today, is_available=True,
+            start_time="09:00", end_time="17:00",
+        )
+        self.url = reverse("period_status_pdf", args=[self.period.pk])
+
+    def test_manager_gets_pdf(self):
+        self.client.force_login(self.leader)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertIn("attachment", resp["Content-Disposition"])
+        self.assertTrue(resp.content.startswith(b"%PDF-"))
+
+    def test_crew_is_blocked(self):
+        self.client.force_login(self.crew)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 302)  # ホームへリダイレクト

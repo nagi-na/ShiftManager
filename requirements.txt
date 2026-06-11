@@ -9,3 +9,7 @@ gunicorn>=23,<27
 #   sudo apt install pkg-config default-libmysqlclient-dev build-essential
 # 開発(SQLite)のみなら未インストールでも動く（DJANGO_DB=mysql のときだけ必要）。
 mysqlclient>=2.2
+
+# 提出状況のA4 PDF出力に使用。pip wheel のみで入りOS依存なし。
+# 日本語フォント(HeiseiKakuGo-W5)を内蔵しており別途フォント同梱は不要。
+reportlab>=4,<5

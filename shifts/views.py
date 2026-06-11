@@ -22,6 +22,7 @@ from .forms import (
     PeriodForm,
     ShiftDayFormSet,
 )
+from .pdf import build_status_pdf
 from .models import (
     Announcement,
     AnnouncementAttachment,
@@ -289,6 +290,54 @@ def period_status(request, pk):
         "total_count": len(table),
     }
     return render(request, "shifts/status.html", context)
+
+
+@login_required
+def period_status_pdf(request, pk):
+    """S4 提出状況一覧を A4横 の PDF で出力する（管理権限のみ）。"""
+    if not request.user.can_manage:
+        messages.error(request, "この画面は管理権限が必要です。")
+        return redirect("home")
+
+    period = get_object_or_404(ShiftPeriod, pk=pk)
+    dates = _date_range(period.start_date, period.end_date)
+
+    staff_list = User.objects.filter(
+        role=User.Role.CREW, is_active=True
+    ).order_by("name", "username")
+    requests = {
+        r.user_id: r
+        for r in ShiftRequest.objects.filter(period=period).prefetch_related("days")
+    }
+
+    rows = []
+    for staff in staff_list:
+        req = requests.get(staff.id)
+        name = staff.name or staff.username
+        if req:
+            days_map = {d.work_date: d for d in req.days.all()}
+            rows.append(
+                {
+                    "name": name,
+                    "submitted": True,
+                    "note": req.note,
+                    "cells": [days_map.get(dt) for dt in dates],
+                }
+            )
+        else:
+            rows.append(
+                {"name": name, "submitted": False, "note": "", "cells": [None] * len(dates)}
+            )
+
+    submitted_count = sum(1 for r in rows if r["submitted"])
+    pdf_bytes = build_status_pdf(
+        period, dates, rows, submitted_count, len(rows), timezone.localtime()
+    )
+
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    filename = f"shift-status-{period.start_date}_{period.end_date}.pdf"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required

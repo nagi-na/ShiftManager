@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("periods/<int:pk>/submit/", views.shift_submit, name="shift_submit"),
     path("periods/<int:pk>/status/", views.period_status, name="period_status"),
+    path("periods/<int:pk>/status/pdf/", views.period_status_pdf, name="period_status_pdf"),
     path("requests/<int:pk>/history/", views.request_history, name="request_history"),
     path("periods/<int:pk>/confirmed/", views.confirmed_shift, name="confirmed_shift"),
     path("confirmed-files/<int:pk>/", views.confirmed_shift_file, name="confirmed_shift_file"),
