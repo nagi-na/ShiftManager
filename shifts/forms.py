@@ -71,7 +71,41 @@ class ShiftDayForm(forms.Form):
         return cleaned
 
 
-ShiftDayFormSet = forms.formset_factory(ShiftDayForm, extra=0)
+class BaseShiftDayFormSet(forms.BaseFormSet):
+    """各日フォームの集合検証。隠しフィールド(work_date)の改ざんに備える。
+
+    画面を普通に操作する限り起きないが、POST を細工すると日付の重複（DBのユニーク
+    制約に当たって500）や期間外の日付（不正データ）を送れてしまうため、ここで弾く。
+    """
+
+    def __init__(self, *args, valid_dates=None, **kwargs):
+        # 期間内の日付の集合。None のときは範囲チェックをしない。
+        self.valid_dates = set(valid_dates) if valid_dates is not None else None
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        seen = set()
+        for form in self.forms:
+            work_date = form.cleaned_data.get("work_date")
+            if work_date is None:
+                continue
+            if work_date in seen:
+                raise ValidationError(
+                    "同じ日付が重複しています。画面を開き直してから提出してください。"
+                )
+            seen.add(work_date)
+            if self.valid_dates is not None and work_date not in self.valid_dates:
+                raise ValidationError(
+                    "対象期間外の日付が含まれています。画面を開き直してから提出してください。"
+                )
+
+
+ShiftDayFormSet = forms.formset_factory(
+    ShiftDayForm, formset=BaseShiftDayFormSet, extra=0
+)
 
 
 class FixedShiftDayForm(forms.Form):
@@ -111,7 +145,35 @@ class FixedShiftDayForm(forms.Form):
         return cleaned
 
 
-FixedShiftFormSet = forms.formset_factory(FixedShiftDayForm, extra=0)
+class BaseFixedShiftFormSet(forms.BaseFormSet):
+    """曜日フォームの集合検証。隠しフィールド(weekday)の改ざんに備える。
+
+    曜日の重複（ユニーク制約に当たって500）や範囲外（0〜6以外）の値を弾く。
+    特に変更申請の payload は、後でリーダーが承認した瞬間に反映されるため、
+    作成時点で正しい曜日だけを通しておく。
+    """
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        seen = set()
+        for form in self.forms:
+            weekday = form.cleaned_data.get("weekday")
+            if weekday is None:
+                continue
+            if weekday not in range(7):
+                raise ValidationError("曜日の値が不正です。画面を開き直してください。")
+            if weekday in seen:
+                raise ValidationError(
+                    "同じ曜日が重複しています。画面を開き直してください。"
+                )
+            seen.add(weekday)
+
+
+FixedShiftFormSet = forms.formset_factory(
+    FixedShiftDayForm, formset=BaseFixedShiftFormSet, extra=0
+)
 
 
 class PeriodForm(forms.ModelForm):

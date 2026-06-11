@@ -142,3 +142,18 @@ class LockoutPreventionTests(TestCase):
         self.client.post(reverse("manage_account_toggle", args=[self.crew.pk]))
         self.crew.refresh_from_db()
         self.assertFalse(self.crew.is_active)
+
+    def test_cannot_reset_own_password(self):
+        # 自分への再発行は認証ハッシュが変わって即ログアウトし、表示された
+        # 新パスワードを見逃すと自分で復旧できなくなるためブロックする。
+        old_hash = self.admin.password
+        self.client.post(reverse("manage_account_reset", args=[self.admin.pk]))
+        self.admin.refresh_from_db()
+        self.assertEqual(self.admin.password, old_hash)  # パスワードは変わらない
+
+    def test_can_reset_other_password(self):
+        # 対照テスト: 他人の再発行は通る（パスワードハッシュが変わる）。
+        old_hash = self.crew.password
+        self.client.post(reverse("manage_account_reset", args=[self.crew.pk]))
+        self.crew.refresh_from_db()
+        self.assertNotEqual(self.crew.password, old_hash)

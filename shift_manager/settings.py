@@ -38,7 +38,6 @@ ALLOWED_HOSTS = (
     if not DEBUG
     else []
 )
-ALLOWED_HOSTS = ('shiftmanager.info', 'localhost', '192.168.10.8') if not DEBUG else []
 
 # --- 上位がHTTPSを終端して中継する構成（Cloudflare Tunnel / リバースプロキシ）向け ---
 # X-Forwarded-Proto で「httpsで受けた」ことを伝える前提で、Djangoに知らせる
@@ -49,7 +48,6 @@ if os.environ.get('DJANGO_BEHIND_TLS_PROXY') == '1':
 _csrf_origins = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS')
 if _csrf_origins:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
-    #CSRF_TRUSTED_ORIGINS += ['https://shiftmanager.info', 'https://localhost', 'https://192.168.10.8']
 
 # Cookie を HTTPS のみで送る（全アクセスがHTTPSのときだけ有効化）
 if os.environ.get('DJANGO_SECURE_COOKIES') == '1':

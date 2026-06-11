@@ -112,7 +112,7 @@ def shift_submit(request, pk):
     dates = _date_range(period.start_date, period.end_date)
 
     if request.method == "POST" and not read_only:
-        formset = ShiftDayFormSet(request.POST, prefix="day")
+        formset = ShiftDayFormSet(request.POST, prefix="day", valid_dates=dates)
         note_form = NoteForm(request.POST)
         if formset.is_valid() and note_form.is_valid():
             _save_submission(request.user, period, formset, note_form)
@@ -413,21 +413,30 @@ def _prune_processed_requests(user, keep=10):
 
 
 def _apply_payload(user, payload):
-    """payload の内容で、ユーザーの固定シフトを全置換する。"""
+    """payload の内容で、ユーザーの固定シフトを全置換する。
+
+    申請作成時にフォームセットで検証済みだが、万一 payload に曜日の重複・範囲外が
+    紛れていても承認操作（リーダー）が500で落ちないよう、ここでも弾いておく。
+    """
+    seen = set()
+    objs = []
+    for d in payload:
+        weekday = d.get("weekday")
+        if weekday not in range(7) or weekday in seen:
+            continue
+        seen.add(weekday)
+        objs.append(
+            WeeklyFixedShift(
+                user=user,
+                weekday=weekday,
+                is_available=d["is_available"],
+                start_time=d["start_time"],
+                end_time=d["end_time"],
+            )
+        )
     with transaction.atomic():
         user.fixed_shifts.all().delete()
-        WeeklyFixedShift.objects.bulk_create(
-            [
-                WeeklyFixedShift(
-                    user=user,
-                    weekday=d["weekday"],
-                    is_available=d["is_available"],
-                    start_time=d["start_time"],
-                    end_time=d["end_time"],
-                )
-                for d in payload
-            ]
-        )
+        WeeklyFixedShift.objects.bulk_create(objs)
 
 
 @login_required
@@ -443,11 +452,14 @@ def my_fixed_shift(request):
     pending = user.fixed_shift_requests.filter(
         status=FixedShiftChangeRequest.Status.PENDING
     ).first()
-    # 直近の処理済み申請（リーダーのコメント表示用）
+    # 直近に「処理された」申請（リーダーのコメント表示用）。
+    # 既定並びは -created_at なので、処理日時で並べ直して最新の結果を出す。
     last_reviewed = (
         user.fixed_shift_requests.exclude(
             status=FixedShiftChangeRequest.Status.PENDING
-        ).first()
+        )
+        .order_by("-reviewed_at")
+        .first()
     )
 
     # 申請モードで保留中は読み取り専用（取り消してから新規申請する）

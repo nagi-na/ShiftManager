@@ -227,6 +227,28 @@ class SubmitFlowTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(ShiftRequest.objects.filter(period=closed, user=self.crew).exists())
 
+    def test_duplicate_work_date_is_rejected(self):
+        # 隠しフィールド改ざん相当: 同じ日付を2件送る → フォーム不正で保存されない
+        # （DBのユニーク制約に当たって500になるのを防ぐ）。
+        data = formset_post_data([
+            {"work_date": self.d0, "start": "09:00", "end": "17:00"},
+            {"work_date": self.d0, "start": "10:00", "end": "18:00"},  # d0 が重複
+        ])
+        resp = self.client.post(self.url, data)
+        self.assertEqual(resp.status_code, 200)  # 再表示（リダイレクトしない）
+        self.assertFalse(ShiftRequest.objects.filter(period=self.period, user=self.crew).exists())
+
+    def test_out_of_range_work_date_is_rejected(self):
+        # 隠しフィールド改ざん相当: 期間外の日付を送る → フォーム不正で保存されない。
+        outside = self.d1 + timedelta(days=10)
+        data = formset_post_data([
+            {"work_date": self.d0, "start": "09:00", "end": "17:00"},
+            {"work_date": outside, "start": "10:00", "end": "18:00"},
+        ])
+        resp = self.client.post(self.url, data)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(ShiftRequest.objects.filter(period=self.period, user=self.crew).exists())
+
     def test_hidden_period_blocks_crew(self):
         # 非表示期間はクルーがアクセスできずホームへ戻される。
         hidden = make_period(self.leader, timezone.now() + timedelta(days=3),
@@ -357,6 +379,18 @@ class FixedShiftTests(TestCase):
         self.assertIsNone(sun.start_time)
         mon = WeeklyFixedShift.objects.get(user=self.crew, weekday=0)
         self.assertEqual((mon.start_time, mon.end_time), ("09:00", "17:00"))
+
+    def test_duplicate_weekday_is_rejected(self):
+        # 隠しフィールド改ざん相当: weekday を重複させて送る → 保存されない
+        # （ユニーク制約に当たって500になるのを防ぐ）。
+        self.crew.fixed_shift_editable_by_crew = True
+        self.crew.save(update_fields=["fixed_shift_editable_by_crew"])
+        self.client.force_login(self.crew)
+        data = fixed_formset_data([{"start": "09:00", "end": "17:00"} for _ in range(7)])
+        data["fx-1-weekday"] = "0"  # 2件目も月曜(0)にして重複させる
+        resp = self.client.post(reverse("my_fixed_shift"), data)
+        self.assertEqual(resp.status_code, 200)  # 保存されず再表示
+        self.assertEqual(WeeklyFixedShift.objects.filter(user=self.crew).count(), 0)
 
     # --- リーダーの代理編集 ---
 
@@ -536,6 +570,29 @@ class FixedShiftRequestApprovalTests(TestCase):
         self.assertEqual(
             FixedShiftChangeRequest.objects.filter(user=other).count(), 1
         )  # 別クルーは無関係
+
+    def test_approve_payload_with_bad_weekday_does_not_crash(self):
+        # 万一 payload に曜日の重複・範囲外が紛れても、承認操作（リーダー）が
+        # 500で落ちず、有効な曜日だけ反映される（防御的処理）。
+        payload = [
+            {"weekday": 0, "is_available": True, "start_time": "09:00", "end_time": "17:00"},
+            {"weekday": 0, "is_available": True, "start_time": "10:00", "end_time": "18:00"},  # 重複
+            {"weekday": 9, "is_available": True, "start_time": "10:00", "end_time": "18:00"},  # 範囲外
+        ]
+        req = FixedShiftChangeRequest.objects.create(
+            user=self.crew,
+            status=FixedShiftChangeRequest.Status.PENDING,
+            payload=payload,
+        )
+        self.client.force_login(self.leader)
+        resp = self.client.post(
+            reverse("manage_fixed_shift_request_review", args=[req.pk]),
+            {"action": "approve"},
+        )
+        self.assertRedirects(resp, reverse("manage_fixed_shift_requests"))
+        shifts = WeeklyFixedShift.objects.filter(user=self.crew)
+        self.assertEqual(shifts.count(), 1)          # 有効な月曜の1件だけ
+        self.assertEqual(shifts.first().weekday, 0)
 
     def test_crew_cannot_review(self):
         self._submit_request([{"start": "09:00", "end": "17:00"} for _ in range(7)])

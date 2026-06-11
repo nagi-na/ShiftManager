@@ -70,6 +70,15 @@ def account_reset_password(request, pk):
     """パスワードを自動再発行する。"""
     target = get_object_or_404(User, pk=pk)
     if request.method == "POST":
+        # 自分自身に再発行すると認証ハッシュが変わり即ログアウトされ、
+        # 表示された新パスワードを見逃すと自分で復旧できなくなる。
+        if target == request.user:
+            messages.error(
+                request,
+                "自分自身のパスワードはここでは再発行できません。"
+                "設定画面の「パスワード変更」から変更してください。",
+            )
+            return redirect("manage_account_edit", pk=pk)
         password = generate_password()
         target.set_password(password)
         target.save(update_fields=["password"])
