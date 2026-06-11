@@ -1,0 +1,239 @@
+/* =====================================================================
+   ShiftManager モノトーンテーマ
+   Bootstrap 5.3 の上に重ねる薄い上書きレイヤー。
+   方針: 墨(ink)×グレーの無彩色。色で伝えていた状態は「濃淡・塗り/枠線・
+   アイコン・絵文字」で識別性を保つ。スマホ中心のため可読性を最優先。
+   ===================================================================== */
+
+:root {
+  --bg:        #f3f2ef;  /* 紙のような温かみのある背景 */
+  --surface:   #ffffff;  /* カード等の面 */
+  --ink:       #18181b;  /* 墨（基本の文字・アクセント） */
+  --ink-2:     #3f3f46;  /* やや淡い墨 */
+  --muted:     #71717a;  /* 補足テキスト */
+  --line:      #e4e3df;  /* 罫線・境界 */
+  --ink-dark:  #161618;  /* ナビ・主要ボタン */
+  --ink-dark-2:#2e2e33;  /* ホバー */
+}
+
+/* ---------- ベース ---------- */
+body,
+body.bg-light {
+  background: var(--bg) !important;
+  color: var(--ink);
+  font-family: "Noto Sans JP", system-ui, -apple-system, "Hiragino Kaku Gothic ProN",
+               "Yu Gothic", Meiryo, sans-serif;
+  line-height: 1.75;
+  letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, .h1, .h2, .h3, .h4 {
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink);
+}
+
+a {
+  color: var(--ink-2);
+  text-underline-offset: 2px;
+  text-decoration-color: #cdccc7;
+}
+a:hover { color: #000; }
+
+hr { border-color: var(--line); }
+
+/* ---------- ナビバー ---------- */
+.navbar.bg-primary {
+  background: var(--ink-dark) !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.45);
+}
+.navbar-brand {
+  font-family: "Noto Serif JP", serif;
+  font-weight: 600;
+  letter-spacing: .16em;
+  color: #fff !important;
+}
+.navbar-text { color: rgba(255,255,255,.85) !important; }
+.navbar .badge.bg-light {
+  background: rgba(255,255,255,.14) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.28);
+}
+.navbar .btn-outline-light {
+  --bs-btn-border-color: rgba(255,255,255,.5);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-bg: #fff;
+  --bs-btn-hover-border-color: #fff;
+  --bs-btn-hover-color: var(--ink);
+}
+
+/* ---------- ボタン ---------- */
+.btn {
+  border-radius: .55rem;
+  font-weight: 500;
+  letter-spacing: .02em;
+  transition: transform .08s ease, background-color .15s ease, box-shadow .15s ease;
+}
+.btn-primary {
+  --bs-btn-bg: var(--ink-dark);
+  --bs-btn-border-color: var(--ink-dark);
+  --bs-btn-hover-bg: var(--ink-dark-2);
+  --bs-btn-hover-border-color: var(--ink-dark-2);
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-disabled-bg: #a1a1a6;
+  --bs-btn-disabled-border-color: #a1a1a6;
+}
+.btn-primary:hover { transform: translateY(-1px); }
+
+.btn-outline-primary {
+  --bs-btn-color: var(--ink);
+  --bs-btn-border-color: var(--ink);
+  --bs-btn-hover-bg: var(--ink);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
+}
+.btn-outline-secondary {
+  --bs-btn-color: var(--ink-2);
+  --bs-btn-border-color: #d2d1cc;
+  --bs-btn-hover-bg: var(--ink);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: var(--ink);
+  --bs-btn-active-border-color: var(--ink);
+}
+/* 削除系は「枠線＋ホバーで塗りつぶし」で、押す重みだけ残す（色は無彩色） */
+.btn-outline-danger {
+  --bs-btn-color: var(--ink);
+  --bs-btn-border-color: var(--ink);
+  --bs-btn-hover-bg: var(--ink);
+  --bs-btn-hover-border-color: var(--ink);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+}
+
+/* ---------- カード ---------- */
+.card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(24,24,27,.04), 0 18px 40px -28px rgba(24,24,27,.28);
+}
+.shadow-sm { box-shadow: 0 1px 2px rgba(24,24,27,.05) !important; }
+/* ホーム等の並ぶカードは、ホバーでわずかに浮かせる */
+.row.g-3 .card.h-100 { transition: transform .12s ease, box-shadow .12s ease; }
+.row.g-3 .card.h-100:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(24,24,27,.05), 0 22px 48px -28px rgba(24,24,27,.35);
+}
+
+/* ---------- フォーム ---------- */
+.form-control, .form-select {
+  border-color: #d7d6d1;
+  border-radius: .5rem;
+  background: var(--surface);
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 .2rem rgba(24,24,27,.12);
+}
+.form-check-input:checked {
+  background-color: var(--ink);
+  border-color: var(--ink);
+}
+.form-check-input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 .2rem rgba(24,24,27,.12);
+}
+
+/* ---------- バッジ（状態の出し分け） ----------
+   色を使えないぶん「濃い塗り＝強調／淡い塗り＝中立／白地＋枠＝注意」で区別する。
+   募集中・提出済み・未読 などの“目立たせたい”ものは濃い墨、
+   締切などの中立は淡いグレー、未提出などの“要対応”は白地に黒枠。 */
+.badge { border-radius: 999px; padding: .4em .75em; font-weight: 500; letter-spacing: .02em; }
+.badge.bg-success,
+.badge.bg-info,
+.badge.bg-danger {
+  background: var(--ink) !important;
+  color: #fff !important;
+}
+.badge.bg-secondary {
+  background: #e7e6e2 !important;
+  color: var(--ink-2) !important;
+  border: 1px solid var(--line);
+}
+.badge.bg-warning {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--ink);
+}
+.badge.bg-light {
+  background: #edece8 !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--line);
+}
+
+/* ---------- アラート ---------- */
+.alert {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 10px;
+  color: var(--ink);
+}
+.alert-secondary { border-left-color: #c7c6c1; }
+.alert-info      { border-left-color: #9a9aa0; }
+.alert-success   { border-left-color: var(--ink); }
+.alert-warning   { border-left-color: var(--ink); background: #f5f4f1; }
+.alert-danger    { border-left-color: var(--ink); background: #f1efed; font-weight: 500; }
+
+/* フラッシュメッセージ（base.html の .app-msg）だけ、成否が分かるアイコンを付ける */
+.app-msg { display: flex; gap: .55rem; align-items: baseline; }
+.app-msg::before { font-weight: 700; }
+.app-msg.alert-success::before { content: "✓"; }
+.app-msg.alert-danger::before  { content: "！"; }
+.app-msg.alert-warning::before { content: "⚠"; }
+.app-msg.alert-info::before,
+.app-msg.alert-secondary::before { content: "・"; }
+
+/* ---------- リスト（アナウンス一覧などのレベル別） ----------
+   レベルの意味は行頭の絵文字（ℹ️⚠️⛔✅）が担うので、面は無彩色＋左の墨罫で統一。 */
+.list-group-item-info,
+.list-group-item-success,
+.list-group-item-warning,
+.list-group-item-danger {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+.list-group-item[class*="list-group-item-"] { border-left: 3px solid var(--ink); }
+
+/* ---------- テーブル ---------- */
+.table { --bs-table-bg: var(--surface); }
+.table > thead.table-light th,
+.table-light, .table-light > * { background: #efeeea !important; color: var(--ink); }
+/* 未提出の行: 赤の代わりに、濃いめグレー＋太字で“目を引く” */
+.table-danger, .table-danger > * {
+  --bs-table-bg: #e6e5e1;
+  background: #e6e5e1 !important;
+  color: var(--ink);
+}
+.table-danger td:first-child { font-weight: 600; box-shadow: inset 3px 0 0 var(--ink); }
+
+/* ---------- テキスト色 ---------- */
+.text-muted   { color: var(--muted) !important; }
+.text-primary { color: var(--ink) !important; }
+.text-success { color: var(--ink) !important; }
+.text-danger  { color: var(--ink) !important; font-weight: 500; }
+
+/* ---------- フッター ---------- */
+.app-footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .8rem;
+  letter-spacing: .14em;
+}
