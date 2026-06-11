@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'accounts',
     'shifts',
+    'audit',
 ]
 
 # カスタムUserモデル（プロジェクト初期に設定する）

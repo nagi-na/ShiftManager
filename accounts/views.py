@@ -3,6 +3,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.crypto import get_random_string
 
+from audit.models import AuditLog
+from audit.utils import log_action
+
 from .decorators import admin_required
 from .forms import AccountCreateForm, AccountEditForm, ProfileEmailForm
 from .models import User
@@ -26,6 +29,10 @@ def account_list(request):
             password = generate_password()
             user.set_password(password)
             user.save()
+            log_action(
+                request, AuditLog.Action.ACCOUNT_CREATE,
+                f"アカウントを作成（{user.get_role_display()}）", target=user.name or user.username,
+            )
             messages.success(
                 request,
                 f"アカウント「{user.name}」を作成しました。"
@@ -58,6 +65,10 @@ def account_edit(request, pk):
                 )
             else:
                 form.save()
+                log_action(
+                    request, AuditLog.Action.ACCOUNT_EDIT,
+                    "アカウントを編集", target=target.name or target.username,
+                )
                 messages.success(request, "アカウントを更新しました。")
                 return redirect("manage_accounts")
     else:
@@ -82,6 +93,10 @@ def account_reset_password(request, pk):
         password = generate_password()
         target.set_password(password)
         target.save(update_fields=["password"])
+        log_action(
+            request, AuditLog.Action.ACCOUNT_RESET_PW,
+            "パスワードを再発行", target=target.name or target.username,
+        )
         messages.success(
             request,
             f"「{target.name}」のパスワードを再発行しました。"
@@ -101,6 +116,10 @@ def account_toggle_active(request, pk):
             target.is_active = not target.is_active
             target.save(update_fields=["is_active"])
             state = "有効" if target.is_active else "無効"
+            log_action(
+                request, AuditLog.Action.ACCOUNT_TOGGLE_ACTIVE,
+                f"アカウントを{state}化", target=target.name or target.username,
+            )
             messages.success(request, f"「{target.name}」を{state}にしました。")
     return redirect("manage_accounts")
 
@@ -113,6 +132,10 @@ def account_toggle_fixed_edit(request, pk):
         target.fixed_shift_editable_by_crew = not target.fixed_shift_editable_by_crew
         target.save(update_fields=["fixed_shift_editable_by_crew"])
         state = "許可" if target.fixed_shift_editable_by_crew else "不許可"
+        log_action(
+            request, AuditLog.Action.ACCOUNT_TOGGLE_FIXED,
+            f"固定シフト本人編集を{state}", target=target.name or target.username,
+        )
         messages.success(
             request, f"「{target.name}」の固定シフト本人編集を{state}にしました。"
         )
@@ -128,6 +151,10 @@ def account_bulk_fixed_edit(request):
             fixed_shift_editable_by_crew=enable
         )
         state = "許可" if enable else "不許可"
+        log_action(
+            request, AuditLog.Action.ACCOUNT_TOGGLE_FIXED,
+            f"全クルー {n} 名の固定シフト本人編集を一括{state}",
+        )
         messages.success(
             request, f"全クルー {n} 名の固定シフト本人編集を{state}にしました。"
         )
@@ -150,6 +177,7 @@ def account_delete(request, pk):
         else:
             name = target.name or target.username
             target.delete()  # 提出データ（ShiftRequest等）は一緒に削除される
+            log_action(request, AuditLog.Action.ACCOUNT_DELETE, "アカウントを削除", target=name)
             messages.success(request, f"アカウント「{name}」を削除しました。")
     return redirect("manage_accounts")
 

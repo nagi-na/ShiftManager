@@ -66,6 +66,18 @@
       </div>
     </div>
   </div>
+
+  {% if user.can_manage_accounts %}
+  <div class="col-12 col-md-6">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6">操作ログ</h2>
+        <p class="text-muted small mb-2">誰が・いつ・何をしたかの記録。種類/操作者/日付で検索・PDF/CSV出力</p>
+        <a class="btn btn-primary btn-sm" href="{% url 'audit_log_list' %}">操作ログを見る</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 {% if user.is_superuser %}

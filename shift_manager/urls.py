@@ -8,6 +8,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('accounts.urls')),
     path('', include('shifts.urls')),
+    path('', include('audit.urls')),
 ]
 
 # 開発時のみ: アップロードされたメディア(確定シフトPDF等)を配信

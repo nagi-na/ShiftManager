@@ -12,6 +12,8 @@ from django.utils import timezone
 
 from accounts.decorators import manager_required
 from accounts.models import User
+from audit.models import AuditLog
+from audit.utils import log_action
 
 from .forms import (
     AnnouncementForm,
@@ -117,6 +119,10 @@ def shift_submit(request, pk):
         note_form = NoteForm(request.POST)
         if formset.is_valid() and note_form.is_valid():
             _save_submission(request.user, period, formset, note_form)
+            log_action(
+                request, AuditLog.Action.SHIFT_SUBMIT,
+                "シフト希望を提出/編集", target=str(period),
+            )
             messages.success(request, "シフト希望を保存しました。")
             return redirect("home")
     else:
@@ -522,11 +528,13 @@ def my_fixed_shift(request):
             payload = _formset_to_payload(formset)
             if mode == "edit":
                 _apply_payload(user, payload)
+                log_action(request, AuditLog.Action.FIXED_EDIT, "自分の固定シフトを編集")
                 messages.success(request, "固定シフトを保存しました。")
             else:
                 FixedShiftChangeRequest.objects.create(
                     user=user, payload=payload, crew_comment=crew_comment
                 )
+                log_action(request, AuditLog.Action.FIXED_REQUEST, "固定シフトの変更を申請")
                 messages.success(request, "固定シフトの変更を申請しました。承認をお待ちください。")
             return redirect("my_fixed_shift")
     else:
@@ -568,6 +576,7 @@ def my_fixed_shift_cancel(request):
             status=FixedShiftChangeRequest.Status.PENDING
         ).delete()
         if deleted:
+            log_action(request, AuditLog.Action.FIXED_REQUEST_CANCEL, "固定シフトの変更申請を取消")
             messages.success(request, "固定シフトの変更申請を取り消しました。新しく申請できます。")
     return redirect("my_fixed_shift")
 
@@ -612,6 +621,10 @@ def manage_fixed_shift_edit(request, user_pk):
         formset = FixedShiftFormSet(request.POST, prefix="fx")
         if formset.is_valid():
             _save_fixed_shift(target, formset)
+            log_action(
+                request, AuditLog.Action.FIXED_EDIT,
+                "固定シフトを代理編集", target=target.name or target.username,
+            )
             messages.success(request, f"「{target.name}」の固定シフトを保存しました。")
             if has_pending:
                 messages.warning(
@@ -707,6 +720,11 @@ def manage_fixed_shift_request_review(request, pk):
             req.save()
             # 処理済みはクルーごとに直近10件だけ残す
             _prune_processed_requests(req.user)
+            decision = "承認" if action == "approve" else "却下"
+            log_action(
+                request, AuditLog.Action.FIXED_REQUEST_REVIEW,
+                f"固定シフト変更申請を{decision}", target=req.user.name or req.user.username,
+            )
             messages.success(request, msg)
             return redirect("manage_fixed_shift_requests")
 
@@ -858,6 +876,7 @@ def manage_announcements(request):
                 AnnouncementAttachment.objects.create(
                     announcement=ann, file=f, original_name=f.name
                 )
+            log_action(request, AuditLog.Action.ANNOUNCE_CREATE, "アナウンスを投稿", target=ann.title)
             messages.success(request, "アナウンスを投稿しました。")
             return redirect("manage_announcements")
         for e in file_errors:
@@ -893,6 +912,7 @@ def manage_announcement_edit(request, pk):
                 AnnouncementAttachment.objects.create(
                     announcement=ann, file=f, original_name=f.name
                 )
+            log_action(request, AuditLog.Action.ANNOUNCE_EDIT, "アナウンスを編集", target=ann.title)
             messages.success(request, "アナウンスを更新しました。")
             return redirect("manage_announcements")
         for e in file_errors:
@@ -912,7 +932,9 @@ def manage_announcement_delete(request, pk):
     if request.method == "POST":
         for att in ann.attachments.all():
             att.file.delete(save=False)
+        title = ann.title
         ann.delete()
+        log_action(request, AuditLog.Action.ANNOUNCE_DELETE, "アナウンスを削除", target=title)
         messages.success(request, "アナウンスを削除しました。")
     return redirect("manage_announcements")
 
@@ -925,6 +947,7 @@ def manage_announcement_settings(request):
         form = AnnouncementSettingsForm(request.POST, instance=obj)
         if form.is_valid():
             form.save()
+            log_action(request, AuditLog.Action.ANNOUNCE_SETTINGS, "アナウンス自動投稿の設定を変更")
             messages.success(request, "自動投稿の設定を保存しました。")
             return redirect("manage_announcement_settings")
     else:
@@ -952,6 +975,10 @@ def confirmed_shift(request, pk):
             if cs:
                 cs.file.delete(save=False)
                 cs.delete()
+                log_action(
+                    request, AuditLog.Action.CONFIRMED_DELETE,
+                    "確定シフトを削除", target=str(period),
+                )
                 messages.success(request, "確定シフトを削除しました。")
             return redirect("confirmed_shift", pk=pk)
 
@@ -965,6 +992,10 @@ def confirmed_shift(request, pk):
                 related_period=period,
                 created_by=request.user,
             )
+            log_action(
+                request, AuditLog.Action.ANNOUNCE_CREATE,
+                "確定シフト公開アナウンスを投稿", target=str(period),
+            )
             messages.success(request, "確定シフトのアナウンスをクルーに投稿しました。")
             return redirect("confirmed_shift", pk=pk)
 
@@ -976,6 +1007,10 @@ def confirmed_shift(request, pk):
             cs.uploaded_by = request.user
             cs.original_name = form.cleaned_data["file"].name
             cs.save()
+            log_action(
+                request, AuditLog.Action.CONFIRMED_UPLOAD,
+                "確定シフトをアップロード", target=str(period),
+            )
             messages.success(request, "確定シフトをアップロードしました。")
             return redirect("confirmed_shift", pk=pk)
 
@@ -1056,6 +1091,7 @@ def manage_periods(request):
                     period=period,
                     by=request.user,
                 )
+            log_action(request, AuditLog.Action.PERIOD_CREATE, "対象期間を作成", target=str(period))
             messages.success(request, "対象期間を作成しました。")
             return redirect("manage_periods")
     else:
@@ -1082,6 +1118,10 @@ def manage_period_toggle_visible(request, pk):
         period.is_visible = not period.is_visible
         period.save(update_fields=["is_visible"])
         state = "表示" if period.is_visible else "非表示"
+        log_action(
+            request, AuditLog.Action.PERIOD_VISIBILITY,
+            f"対象期間をスタッフに{state}", target=str(period),
+        )
         messages.success(request, f"「{period}」をスタッフに{state}にしました。")
     return redirect("manage_periods")
 
@@ -1094,6 +1134,7 @@ def manage_period_edit(request, pk):
         form = PeriodForm(request.POST, instance=period)
         if form.is_valid():
             form.save()
+            log_action(request, AuditLog.Action.PERIOD_EDIT, "対象期間を編集", target=str(period))
             messages.success(request, "対象期間を更新しました。")
             return redirect("manage_periods")
     else:
@@ -1115,6 +1156,11 @@ def manage_period_close(request, pk):
             period.status = ShiftPeriod.Status.CLOSED
             msg = "締め切りました。"
         period.save(update_fields=["status"])
+        reopened = period.status == ShiftPeriod.Status.OPEN
+        log_action(
+            request, AuditLog.Action.PERIOD_CLOSE,
+            "対象期間を" + ("募集再開" if reopened else "手動締切"), target=str(period),
+        )
         messages.success(request, msg)
     return redirect("manage_periods")
 
@@ -1130,6 +1176,10 @@ def manage_period_delete(request, pk):
             cs.file.delete(save=False)
         title = str(period)
         period.delete()
+        log_action(
+            request, AuditLog.Action.PERIOD_DELETE,
+            f"対象期間を削除（提出 {count} 件も削除）", target=title,
+        )
         if count:
             messages.success(
                 request, f"「{title}」と提出 {count} 件を削除しました。"
